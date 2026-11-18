@@ -281,6 +281,20 @@ TEXTOS.update({
     "ficha.agregado.ver": ("Ver carrito", "View cart"),
     "nav.saltar": ("Ir al contenido", "Skip to content"),
 })
+TEXTOS.update({
+    "saldo.disponible": (
+        "Saldo disponible: ✦ {monto} chispas",
+        "Available balance: ✦ {monto} Sparks",
+    ),
+    "carrito.subtotal": ("Subtotal: ✦ {monto}", "Subtotal: ✦ {monto}"),
+    "carrito.saldo": ("Te quedan ✦ {monto} chispas", "You have ✦ {monto} Sparks left"),
+    "carrito.actualizar": ("Cambiar", "Update"),
+    "carrito.sin_saldo": (
+        "No te alcanzan las chispas para eso. Probá con menos unidades o sacá algo del carrito.",
+        "You don't have enough Sparks for that. Try fewer units or take something out of your cart.",
+    ),
+    "carrito.maximo": ("Hasta 9 unidades por producto.", "Up to 9 units per item."),
+})
 
 
 def campos(texto):

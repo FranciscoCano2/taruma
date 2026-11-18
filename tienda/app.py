@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Servicio de Taruma: servidor, tabla de rutas, prefijo de idioma, cabeceras y registro."""
 import re
+import socket
 import sys
 import threading
 import time
@@ -8,10 +9,12 @@ from collections import namedtuple
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
-from tienda import config
+from tienda import config, datos
 
 MAX_CUERPO = 4096
 MAX_CONEXIONES = 32
+ESCURRIR_PLAZO = 0.2
+ESCURRIR_TOPE = 65536
 MAX_CAMPOS = 20
 METODOS = ("GET", "POST", "HEAD", "PUT", "DELETE", "PATCH", "OPTIONS")
 PREFIJO = re.compile(r"/tienda(?P<en>/en(?=/|$))?(?P<resto>/.*)?")
@@ -178,6 +181,7 @@ class Manejador(BaseHTTPRequestHandler):
             escribir_error(type(e).__name__, self.nombre)
             self.responder(500, b"Error")
         finally:
+            datos.cerrar()
             self.anotar()
 
 
@@ -212,6 +216,8 @@ class Servidor(ThreadingHTTPServer):
             request.settimeout(1)
             request.sendall(b"HTTP/1.0 503 Service Unavailable\r\nContent-Length: 0\r\n"
                             b"Cache-Control: no-store\r\nConnection: close\r\n\r\n")
+            request.shutdown(socket.SHUT_WR)
+            _escurrir(request)
         except OSError:
             pass
         finally:
@@ -221,16 +227,37 @@ class Servidor(ThreadingHTTPServer):
         escribir_error(type(sys.exc_info()[1]).__name__)
 
 
+def _escurrir(request, plazo=ESCURRIR_PLAZO, tope=ESCURRIR_TOPE):
+    """Lee y descarta lo que mando el cliente, con plazo corto. Cerrar un socket con
+    datos sin leer manda RST en vez de FIN y el cliente pierde el 503 que ya enviamos."""
+    fin = time.monotonic() + plazo
+    leidos = 0
+    while leidos < tope:
+        resta = fin - time.monotonic()
+        if resta <= 0:
+            return
+        request.settimeout(resta)
+        trozo = request.recv(4096)
+        if not trozo:
+            return
+        leidos += len(trozo)
+
+
 def instalar_ganchos():
     threading.excepthook = lambda args: escribir_error(args.exc_type.__name__)
 
 
 def main():
     global CONFIG
+    from tienda import vistas  # noqa: F401  registra las rutas de las paginas
     CONFIG = config.cargar()
+    datos.iniciar(CONFIG.db)
     instalar_ganchos()
     Servidor(("0.0.0.0", 8000), Manejador).serve_forever()
 
 
 if __name__ == "__main__":
-    main()
+    # Con `python -m tienda.app` este archivo es __main__; las vistas registran sus
+    # rutas en tienda.app. Arrancar desde ese modulo deja una sola tabla de rutas.
+    from tienda import app as _app
+    _app.main()
