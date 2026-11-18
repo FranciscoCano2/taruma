@@ -10,7 +10,9 @@ from tienda.textos import t, unidades
 
 PREFIJOS = {"es": "/tienda", "en": "/tienda/en"}
 OTRO = {"es": "en", "en": "es"}
-AVISOS = {"agregado": "ficha.agregado", "saldo": "carrito.sin_saldo", "maximo": "carrito.maximo"}
+AVISOS = {"agregado": "ficha.agregado", "saldo": "carrito.sin_saldo", "maximo": "carrito.maximo",
+          "entraste": "ingreso.hecho", "saliste": "salir.hecho"}
+PORTFOLIO = "/"
 
 ESTILO = b"""*{box-sizing:border-box}
 body{margin:0;font:16px/1.5 system-ui,sans-serif;color:#222;background:#faf8f4}
@@ -30,6 +32,8 @@ nav{display:flex;gap:16px;margin-left:auto}
 .aviso{background:#fff4d6;border:1px solid #e0c060;padding:8px 12px;border-radius:6px}
 form{display:inline-flex;gap:8px;align-items:center;margin:4px 8px 4px 0}
 button{font:inherit;padding:4px 12px;cursor:pointer}
+input{font:inherit;padding:4px 8px;max-width:100%}
+.error{background:#fde8e4;border:1px solid #d08070;padding:8px 12px;border-radius:6px}
 footer{font-size:14px;color:#555}
 """
 
@@ -79,7 +83,14 @@ def _aviso(idioma, aviso):
     return '<p class="aviso" role="status">%s%s</p>' % (_e(t(AVISOS[aviso], idioma)), extra)
 
 
-def _documento(idioma, titulo, camino, renglones, contenido):
+def _cuenta(idioma, ingresada):
+    """Enlace de la barra: Salir si la sesion ya entro con el enlace, si no Ingresar."""
+    if ingresada:
+        return '<a href="%s/salir">%s</a>\n' % (PREFIJOS[idioma], _e(t("nav.salir", idioma)))
+    return '<a href="%s/ingresar">%s</a>\n' % (PREFIJOS[idioma], _e(t("nav.ingresar", idioma)))
+
+
+def _documento(idioma, titulo, camino, renglones, contenido, ingresada=False):
     pre, otro = PREFIJOS[idioma], OTRO[idioma]
     n = sum(c for _, c in _productos(renglones))
     return "".join((
@@ -97,6 +108,7 @@ def _documento(idioma, titulo, camino, renglones, contenido):
         '<a href="%s/">%s</a>\n' % (pre, _e(t("nav.catalogo", idioma))),
         '<a href="%s/carrito" aria-label="%s">%s (%d)</a>\n' % (
             pre, _e(t("nav.carrito.aria", idioma, n=n)), _e(t("nav.carrito", idioma)), n),
+        _cuenta(idioma, ingresada),
         '<a href="%s%s" lang="%s" hreflang="%s" aria-label="%s">%s</a>\n' % (
             PREFIJOS[otro], camino, otro, otro, _e(t("idioma.aria", idioma)),
             _e(t("idioma." + otro, idioma))),
@@ -120,7 +132,7 @@ def _ficha(idioma, csrf, p):
     ))
 
 
-def catalogo_html(idioma, csrf, renglones, aviso=None):
+def catalogo_html(idioma, csrf, renglones, aviso=None, ingresada=False):
     partes = [
         "<h1>%s</h1>\n" % _e(t("nav.catalogo", idioma)),
         '<p class="saldo">%s</p>\n' % _e(t("saldo.disponible", idioma,
@@ -133,7 +145,8 @@ def catalogo_html(idioma, csrf, renglones, aviso=None):
         partes.append('<section aria-labelledby="cat-%s">\n<h2 id="cat-%s">%s</h2>\n'
                       '<ul class="productos">\n%s</ul>\n</section>\n'
                       % (cat, cat, _e(t("cat." + cat, idioma)), fichas))
-    return _documento(idioma, t("aviso.tab.titulo", idioma), "/", renglones, "".join(partes))
+    return _documento(idioma, t("aviso.tab.titulo", idioma), "/", renglones, "".join(partes),
+                      ingresada)
 
 
 def _renglon(idioma, csrf, p, n):
@@ -154,7 +167,7 @@ def _renglon(idioma, csrf, p, n):
     ))
 
 
-def carrito_html(idioma, csrf, renglones, aviso=None):
+def carrito_html(idioma, csrf, renglones, aviso=None, ingresada=False):
     titulo = t("aviso.tab.titulo.pagina", idioma, pagina=t("carrito.titulo", idioma))
     partes = ["<h1>%s</h1>\n" % _e(t("carrito.titulo", idioma)), _aviso(idioma, aviso)]
     lista = list(_productos(renglones))
@@ -169,4 +182,103 @@ def carrito_html(idioma, csrf, renglones, aviso=None):
         partes.append('<p class="total">%s</p>\n' % _e(t("carrito.total", idioma, monto=monto)))
         partes.append('<p class="saldo">%s</p>\n' % _e(t("carrito.saldo", idioma, monto=resto)))
         partes.append("<p>%s</p>\n" % _e(t("carrito.nota", idioma)))
-    return _documento(idioma, titulo, "/carrito", renglones, "".join(partes))
+    return _documento(idioma, titulo, "/carrito", renglones, "".join(partes), ingresada)
+
+
+# --- Ingreso y salida (T09) --------------------------------------------------
+
+def _pagina_simple(idioma, clave_titulo, camino, renglones, contenido, ingresada):
+    titulo = t(clave_titulo, idioma)
+    return _documento(idioma, t("aviso.tab.titulo.pagina", idioma, pagina=titulo), camino,
+                      renglones, "<h1>%s</h1>\n%s" % (_e(titulo), contenido), ingresada)
+
+
+def _campo_csrf(csrf):
+    return '<input type="hidden" name="csrf" value="%s">' % _e(csrf) if csrf else ""
+
+
+def ingreso_html(idioma, csrf, renglones, ingresada=False, correo="", invalido=False):
+    """Formulario del correo. `correo` solo se devuelve a quien lo escribio (su propio POST)."""
+    pre = PREFIJOS[idioma]
+    if ingresada:
+        contenido = '<p>%s</p>\n<p><a href="%s/salir">%s</a> · <a href="%s/">%s</a></p>\n' % (
+            _e(t("ingreso.ya", idioma)), pre, _e(t("salir.boton", idioma)),
+            pre, _e(t("nav.catalogo", idioma)))
+        return _pagina_simple(idioma, "ingreso.titulo", "/ingresar", renglones, contenido, True)
+    error = ""
+    if invalido:
+        error = '<p class="error" id="correo-error" role="alert">%s</p>\n' % _e(
+            t("ingreso.invalido", idioma))
+    contenido = "".join((
+        "<p>%s</p>\n" % _e(t("ingreso.cuerpo", idioma)),
+        error,
+        '<form method="post" action="%s/ingresar">%s' % (pre, _campo_csrf(csrf)),
+        '<label for="correo">%s</label> ' % _e(t("ingreso.campo", idioma)),
+        '<input type="email" id="correo" name="correo" required maxlength="254"'
+        ' autocomplete="email" placeholder="%s" value="%s"%s>' % (
+            _e(t("ingreso.campo.ejemplo", idioma)), _e(correo),
+            ' aria-invalid="true" aria-describedby="correo-error"' if invalido else ""),
+        '<button type="submit">%s</button></form>\n' % _e(t("ingreso.boton", idioma)),
+        "<p>%s</p>\n" % _e(t("ingreso.dato", idioma)),
+        "<p>%s</p>\n" % _e(t("ingreso.dato.abandono", idioma)),
+        "<p>%s</p>\n" % _e(t("ingreso.dato.gmail", idioma)),
+    ))
+    return _pagina_simple(idioma, "ingreso.titulo", "/ingresar", renglones, contenido, False)
+
+
+def enviado_html(idioma, renglones, ingresada=False):
+    """Igual para un envio real y uno simulado: nunca muestra el correo."""
+    contenido = '<p>%s</p>\n<p><a href="%s/ingresar">%s</a></p>\n' % (
+        _e(t("ingreso.enviado.cuerpo.anonimo", idioma)), PREFIJOS[idioma],
+        _e(t("ingreso.enviado.boton", idioma)))
+    return _pagina_simple(idioma, "ingreso.enviado.titulo", "/ingresar/enviado", renglones,
+                          contenido, ingresada)
+
+
+def confirmar_html(idioma, token, renglones, ingresada=False):
+    """El GET del enlace solo muestra este formulario; el canje es el POST."""
+    contenido = "".join((
+        "<p>%s</p>\n" % _e(t("ingreso.confirmar.cuerpo", idioma)),
+        '<form method="post" action="%s/entrar">' % PREFIJOS[idioma],
+        '<input type="hidden" name="t" value="%s">' % _e(token),
+        '<button type="submit">%s</button></form>\n' % _e(t("ingreso.confirmar.boton", idioma)),
+    ))
+    return _pagina_simple(idioma, "ingreso.confirmar.titulo", "/ingresar", renglones, contenido,
+                          ingresada)
+
+
+# base de las claves -> (destino del boton, relativo al prefijo o absoluto)
+MENSAJES = {
+    "ingreso.vencido": ("/ingresar", False),
+    "ingreso.enlace": ("/ingresar", False),
+    "error.intentos": ("/", False),
+    "error.apagada": (PORTFOLIO, True),
+}
+
+
+def mensaje_html(idioma, base, renglones, ingresada=False):
+    """Paginas de un titulo, un parrafo y un boton: enlace vencido o invalido, 429 y 503."""
+    destino, absoluto = MENSAJES[base]
+    href = destino if absoluto else PREFIJOS[idioma] + destino
+    contenido = '<p>%s</p>\n<p><a href="%s">%s</a></p>\n' % (
+        _e(t(base + ".cuerpo", idioma)), _e(href), _e(t(base + ".boton", idioma)))
+    return _pagina_simple(idioma, base + ".titulo", "/ingresar", renglones, contenido, ingresada)
+
+
+def generico_html(idioma, renglones, ingresada=False):
+    contenido = '<p><a href="%s/">%s</a></p>\n' % (PREFIJOS[idioma],
+                                                    _e(t("error.404.boton", idioma)))
+    return _documento(idioma, t("aviso.tab.titulo", idioma), "/", renglones,
+                      "<h1>%s</h1>\n%s" % (_e(t("error.generico", idioma)), contenido), ingresada)
+
+
+def salir_html(idioma, csrf, renglones, ingresada=False):
+    pre = PREFIJOS[idioma]
+    contenido = "".join((
+        "<p>%s</p>\n" % _e(t("salir.confirmar.cuerpo", idioma)),
+        '<form method="post" action="%s/salir">%s' % (pre, _campo_csrf(csrf)),
+        '<button type="submit">%s</button></form>\n' % _e(t("salir.confirmar.si", idioma)),
+        '<a href="%s/">%s</a>\n' % (pre, _e(t("salir.confirmar.no", idioma))),
+    ))
+    return _pagina_simple(idioma, "salir.confirmar.titulo", "/salir", renglones, contenido,
+                          ingresada)

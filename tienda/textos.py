@@ -295,6 +295,20 @@ TEXTOS.update({
     ),
     "carrito.maximo": ("Hasta 9 unidades por producto.", "Up to 9 units per item."),
 })
+TEXTOS.update({
+    "ingreso.enviado.cuerpo.anonimo": (
+        "Te mandamos un enlace al correo que escribiste. Tocalo para entrar. Vence en 15 minutos y sirve una sola vez. Si no llega, mirá en spam.",
+        "We sent a link to the email you entered. Tap it to get in. It expires in 15 minutes and works once. If it doesn't show up, check spam.",
+    ),
+    "ingreso.hecho": (
+        "Listo, entraste. Tu carrito sigue como lo dejaste.",
+        "You're in. Your cart is just as you left it.",
+    ),
+    "ingreso.ya": (
+        "Ya entraste a Tarumá. Cuando quieras, tocá Salir y se borra todo.",
+        "You're already signed in to Tarumá. Whenever you like, tap Sign out and everything is deleted.",
+    ),
+})
 
 
 def campos(texto):

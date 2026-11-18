@@ -15,6 +15,9 @@ Corre en `/tienda` del portfolio (repo `arya-web`), detrás de Caddy. Usa solo l
 - `tienda/limites.py`: límites por IP, correo, sesión y canje.
 - `tienda/enlace.py`: enlace mágico (15 min, un solo uso, el canje rota la sesión).
 - `tienda/correo.py`: envío SMTP y borrado IMAP de la copia en Gmail.
+- `tienda/vistas.py`: rutas de catálogo y carrito.
+- `tienda/ingreso.py`: rutas de ingreso con enlace mágico y salida.
+- `tienda/paginas.py`: HTML de todas las páginas (sin JavaScript) y hoja de estilo.
 - `tienda/pruebas/`: pruebas.
 
 ## Probar
