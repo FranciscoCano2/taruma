@@ -294,6 +294,59 @@ class Acceso(Base):
         self.assertEqual(self.gracias(), [])
 
 
+    def _canjear(self, token):
+        return pedir(self.puerto, "POST", "/tienda/entrar", {"t": token}, {"Origin": BASE})
+
+    def test_carrera_canje_justo_antes_de_crear_el_enlace(self):
+        """Pedir A, pedir B y canjear el enlace de A mientras B todavia no tiene enlace: el de A
+        ya se borro junto con guardar B, asi que el canje falla y nadie queda ingresado con B."""
+        victima = "beto@example.com"
+        self.agregar("03")
+        self.pedir_enlace(ANA)
+        token_ana = self.token()
+        real = ingreso.enlace.crear
+        canjes = []
+
+        def crear(*a, **k):
+            canjes.append(self._canjear(token_ana)[0])
+            return real(*a, **k)
+        with mock.patch.object(ingreso.enlace, "crear", crear):
+            self.assertEqual(self.pedir_enlace(victima)[0], 303)
+        self.assertEqual(canjes, [400])
+        self.assertEqual(self.ses()["correo"], victima)
+        self.assertEqual(self.ses()["ingresada"], 0)
+        self.assertEqual(self.comprar()[1]["location"], "/tienda/ingresar")
+        self.assertEqual(self.gracias(), [])
+
+    def test_carrera_canje_justo_antes_de_guardar_el_correo(self):
+        """Si el canje de A gana, la sesion rota con el correo de A (el del enlace canjeado) y el
+        pedido de B no guarda nada ni manda nada."""
+        victima = "beto@example.com"
+        self.agregar("03")
+        self.pedir_enlace(ANA)
+        token_ana = self.token()
+        enviados = len(self.enviados)
+        real = limites.pedir_enlace
+        nuevas = []
+
+        def pedir_enlace(*a, **k):
+            resultado = real(*a, **k)
+            estado, cab, _ = self._canjear(token_ana)
+            nuevas.append((estado, cab["set-cookie"].split(";")[0]))
+            return resultado
+        with mock.patch.object(limites, "pedir_enlace", pedir_enlace):
+            self.assertEqual(self.pedir_enlace(victima)[0], 403)
+        (estado, cookie), = nuevas
+        self.assertEqual(estado, 303)
+        rotada = sesion.actual(cookie)
+        self.assertEqual((rotada["correo"], rotada["ingresada"]), (ANA, 1))
+        self.assertEqual(len(self.enviados), enviados)
+        self.cookie = cookie
+        self.assertEqual(self.comprar()[1]["location"], "/tienda/confirmacion")
+        (para, _), = self.gracias()
+        self.assertEqual(para, [ANA])
+
+
 class Resumen(Base):
     def test_resumen_es(self):
         self.listo()

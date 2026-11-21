@@ -110,19 +110,27 @@ def post_ingresar(p):
         return _mensaje(p, 429, "error.intentos", ses, extra)
     if resultado == "tope":
         return _mensaje(p, 503, "error.apagada", ses, extra)
+    if resultado not in ("ok", "silencioso"):
+        raise RuntimeError("pedir_enlace")
+    # Antes de crear y mandar el enlace, en una sola transaccion: se borran los enlaces vivos
+    # de la sesion y se guarda la direccion nueva. Asi el unico enlace canjeable de la sesion
+    # es siempre el del correo guardado: entre esta transaccion y enlace.crear no hay ninguno,
+    # y despues solo el de `direccion`. Si no, canjear un enlace anterior podia dejar la sesion
+    # ingresada con una direccion que nadie demostro tener, y la compra (T10) le mandaria el
+    # correo de gracias. Si el envio falla, el correo queda guardado pero sin enlace vivo e
+    # ingresada en 0 (una sesion ingresada no llega hasta aca): con el no se puede comprar.
+    with datos.inmediata():
+        datos.enlaces_borrar(h)
+        guardado = datos.sesion_poner_correo(h, direccion)
+    if not guardado:
+        # La sesion se roto (canje) o se borro en el medio: no mandamos nada.
+        return vistas._error(403)
     if resultado == "ok":
         fallo = _enviar(p, ses, direccion)
         if fallo is not None:
             return fallo._replace(cabeceras=tuple(fallo.cabeceras) + extra)
-    elif resultado == "silencioso":
-        _simular_envio()
-        # Como en 'ok' (enlace.crear borra los anteriores): si quedara vivo el enlace de un
-        # correo anterior, canjearlo dejaria la sesion ingresada con esta direccion, que nadie
-        # demostro tener, y la compra le mandaria el correo de gracias (T10).
-        datos.enlaces_borrar(h)
     else:
-        raise RuntimeError("pedir_enlace")
-    datos.sesion_poner_correo(h, direccion)
+        _simular_envio()
     return _ir(p, "/ingresar/enviado", extra)
 
 
