@@ -360,7 +360,7 @@ class Entrar(Base):
         token = self.pedido()
         vieja = self.cookie
         estado, cab, _ = self.post("/tienda/entrar", {"t": token})
-        self.assertEqual((estado, cab["location"]), (303, "/tienda/?aviso=entraste"))
+        self.assertEqual((estado, cab["location"]), (303, "/tienda/checkout?aviso=entraste"))
         self.assertRegex(cab["set-cookie"], r"^__Host-taruma_sesion=[A-Za-z0-9_-]{43}; Path=/;"
                                             r" Secure; HttpOnly; SameSite=Lax; Max-Age=7200$")
         self.assertNotEqual(self.cookie, vieja)

@@ -11,7 +11,7 @@ from tienda.textos import t, unidades
 PREFIJOS = {"es": "/tienda", "en": "/tienda/en"}
 OTRO = {"es": "en", "en": "es"}
 AVISOS = {"agregado": "ficha.agregado", "saldo": "carrito.sin_saldo", "maximo": "carrito.maximo",
-          "entraste": "ingreso.hecho", "saliste": "salir.hecho"}
+          "entraste": "ingreso.hecho", "saliste": "salir.hecho", "comprando": "carrito.comprando"}
 PORTFOLIO = "/"
 
 ESTILO = b"""*{box-sizing:border-box}
@@ -32,6 +32,7 @@ nav{display:flex;gap:16px;margin-left:auto}
 .aviso{background:#fff4d6;border:1px solid #e0c060;padding:8px 12px;border-radius:6px}
 form{display:inline-flex;gap:8px;align-items:center;margin:4px 8px 4px 0}
 button{font:inherit;padding:4px 12px;cursor:pointer}
+.boton{display:inline-block;background:#7a3e12;color:#fff;padding:6px 16px;border-radius:6px;text-decoration:none}
 input{font:inherit;padding:4px 8px;max-width:100%}
 .error{background:#fde8e4;border:1px solid #d08070;padding:8px 12px;border-radius:6px}
 footer{font-size:14px;color:#555}
@@ -181,8 +182,18 @@ def carrito_html(idioma, csrf, renglones, aviso=None, ingresada=False):
         partes.append('<ul class="renglones">\n%s</ul>\n' % filas)
         partes.append('<p class="total">%s</p>\n' % _e(t("carrito.total", idioma, monto=monto)))
         partes.append('<p class="saldo">%s</p>\n' % _e(t("carrito.saldo", idioma, monto=resto)))
-        partes.append("<p>%s</p>\n" % _e(t("carrito.nota", idioma)))
+        partes.append(_seguir(idioma, ingresada))
     return _documento(idioma, titulo, "/carrito", renglones, "".join(partes), ingresada)
+
+
+def _seguir(idioma, ingresada):
+    """Con la sesion ingresada, al resumen; si no, a ingresar (hace falta para comprar)."""
+    pre = PREFIJOS[idioma]
+    if ingresada:
+        return '<p><a class="boton" href="%s/checkout">%s</a></p>\n' % (
+            pre, _e(t("carrito.continuar", idioma)))
+    return '<p>%s</p>\n<p><a class="boton" href="%s/ingresar">%s</a></p>\n' % (
+        _e(t("carrito.nota", idioma)), pre, _e(t("carrito.ingresar.boton", idioma)))
 
 
 # --- Ingreso y salida (T09) --------------------------------------------------
@@ -281,4 +292,52 @@ def salir_html(idioma, csrf, renglones, ingresada=False):
         '<a href="%s/">%s</a>\n' % (pre, _e(t("salir.confirmar.no", idioma))),
     ))
     return _pagina_simple(idioma, "salir.confirmar.titulo", "/salir", renglones, contenido,
+                          ingresada)
+
+
+# --- Resumen y compra de prueba (T10) ----------------------------------------
+
+def _resumen(idioma, p, n):
+    return "".join((
+        '<li class="renglon">\n<h3>%s</h3>\n' % _e(p.nombre(idioma)),
+        "<p>%s</p>\n" % _e(t("carrito.linea", idioma, n=n,
+                             monto=catalogo.formatear_monto(p.precio, idioma))),
+        "<p>%s</p>\n</li>\n" % _e(t("carrito.subtotal", idioma,
+                                    monto=catalogo.formatear_monto(p.precio * n, idioma))),
+    ))
+
+
+def checkout_html(idioma, csrf, renglones, correo, aviso=None):
+    """Resumen de quien ya entro. `correo` es el de su propia sesion: solo se le muestra a ella."""
+    suma = total(renglones)
+    filas = "".join(_resumen(idioma, p, n) for p, n in _productos(renglones))
+    saldo_inicial = catalogo.formatear_monto(catalogo.SALDO_INICIAL, idioma)
+    partes = [
+        _aviso(idioma, aviso),
+        "<h2>%s</h2>\n" % _e(t("checkout.subtitulo", idioma)),
+        '<ul class="renglones">\n%s</ul>\n' % filas,
+        '<p class="total">%s</p>\n' % _e(t("checkout.total", idioma,
+                                          monto=catalogo.formatear_monto(suma, idioma))),
+        '<p class="saldo">%s</p>\n' % _e(t("checkout.saldo", idioma, monto=saldo_inicial)),
+        "<p>%s</p>\n" % _e(t("checkout.correo", idioma, correo=correo)),
+        "<p>%s</p>\n" % _e(t("checkout.aclaracion", idioma)),
+    ]
+    if suma > catalogo.SALDO_INICIAL:
+        partes.append('<p class="error" role="alert">%s</p>\n<p><a href="%s/carrito">%s</a></p>\n'
+                      % (_e(t("checkout.sin_saldo", idioma)), PREFIJOS[idioma],
+                         _e(t("nav.carrito", idioma))))
+    else:
+        partes.append('<form method="post" action="%s/checkout">%s' % (PREFIJOS[idioma],
+                                                                      _campo_csrf(csrf)))
+        partes.append('<button type="submit">%s</button></form>\n'
+                      % _e(t("checkout.boton", idioma)))
+    return _pagina_simple(idioma, "checkout.titulo", "/checkout", renglones, "".join(partes), True)
+
+
+def confirmacion_html(idioma, renglones, ingresada=False):
+    """La sesion ya se borro: el cuerpo no nombra el correo."""
+    contenido = '<p>%s</p>\n<p><a class="boton" href="%s/">%s</a></p>\n' % (
+        _e(t("confirmacion.cuerpo.anonimo", idioma)), PREFIJOS[idioma],
+        _e(t("confirmacion.boton", idioma)))
+    return _pagina_simple(idioma, "confirmacion.titulo", "/confirmacion", renglones, contenido,
                           ingresada)

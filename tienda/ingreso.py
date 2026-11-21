@@ -86,6 +86,10 @@ def post_ingresar(p):
     ses = sesion.actual(p.headers.get("Cookie"))
     if ses is not None and not sesion.verificar_csrf(ses, p.campos.get("csrf")):
         return vistas._error(403)
+    if vistas._ingresada(ses):
+        # Ya entro: cambiar el correo ahora lo dejaria ingresado con una direccion sin
+        # comprobar (T10). La pagina ya no ofrece el formulario; un POST armado no cambia nada.
+        return _ir(p, "/ingresar")
     escrito = p.campos.get("correo")
     escrito = escrito.strip() if isinstance(escrito, str) else ""
     direccion = limites.validar_correo(escrito)
@@ -112,6 +116,10 @@ def post_ingresar(p):
             return fallo._replace(cabeceras=tuple(fallo.cabeceras) + extra)
     elif resultado == "silencioso":
         _simular_envio()
+        # Como en 'ok' (enlace.crear borra los anteriores): si quedara vivo el enlace de un
+        # correo anterior, canjearlo dejaria la sesion ingresada con esta direccion, que nadie
+        # demostro tener, y la compra le mandaria el correo de gracias (T10).
+        datos.enlaces_borrar(h)
     else:
         raise RuntimeError("pedir_enlace")
     datos.sesion_poner_correo(h, direccion)
@@ -160,7 +168,8 @@ def post_entrar(p):
         limites.canje_fallido(ip)
         base = "ingreso.vencido" if enlace.validar(token) == "vencido" else "ingreso.enlace"
         return _mensaje(p, 400, base, actual)
-    return _ir(p, "/?aviso=entraste", (("Set-Cookie", sesion.cabecera_cookie(nueva["id"])),))
+    destino = "/checkout?aviso=entraste" if vistas._renglones(nueva) else "/?aviso=entraste"
+    return _ir(p, destino, (("Set-Cookie", sesion.cabecera_cookie(nueva["id"])),))
 
 
 # --- Salir -------------------------------------------------------------------

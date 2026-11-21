@@ -196,6 +196,10 @@ def enlace_crear(token_hash, sesion, vence):
         (token_hash, sesion, int(vence)))
 
 
+def enlaces_borrar(sesion):
+    conexion().execute("DELETE FROM enlaces WHERE sesion = ?", (sesion,))
+
+
 def enlace_por_hash(token_hash):
     return _fila(conexion().execute(
         "SELECT * FROM enlaces WHERE token_hash = ?", (token_hash,)).fetchone())

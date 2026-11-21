@@ -17,6 +17,7 @@ Corre en `/tienda` del portfolio (repo `arya-web`), detrás de Caddy. Usa solo l
 - `tienda/correo.py`: envío SMTP y borrado IMAP de la copia en Gmail.
 - `tienda/vistas.py`: rutas de catálogo y carrito.
 - `tienda/ingreso.py`: rutas de ingreso con enlace mágico y salida.
+- `tienda/compra.py`: resumen (`/checkout`), compra de prueba con correo de gracias y confirmación. Al comprar se borra la sesión con el correo; solo queda un contador anónimo.
 - `tienda/paginas.py`: HTML de todas las páginas (sin JavaScript) y hoja de estilo.
 - `tienda/pruebas/`: pruebas.
 

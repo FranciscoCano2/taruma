@@ -309,6 +309,17 @@ TEXTOS.update({
         "You're already signed in to Tarumá. Whenever you like, tap Sign out and everything is deleted.",
     ),
 })
+TEXTOS.update({
+    "confirmacion.cuerpo.anonimo": (
+        "No se cobró nada y no hay nada en camino. Te escribimos al correo con el que entraste para agradecerte y pedirte tu opinión. Ese correo ya salió, así que borramos lo que cargaste.",
+        "Nothing was charged and nothing is on its way. We wrote to the email you signed in with to thank you and ask what you thought. That email is out, so we deleted what you entered.",
+    ),
+    "carrito.ingresar.boton": ("Ingresar para comprar", "Sign in to buy"),
+    "carrito.comprando": (
+        "Tu compra de prueba se está enviando: el carrito no se puede cambiar ahora.",
+        "Your test purchase is being sent: the cart can't change right now.",
+    ),
+})
 
 
 def campos(texto):
