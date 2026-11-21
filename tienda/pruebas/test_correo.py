@@ -26,6 +26,7 @@ TODOS, PAPELERA = "[Gmail]/Todos", "[Gmail]/Papelera"
 class FalsoMsg:
     def __init__(self, uid, cabeceras, texto=b""):
         self.uid, self.cabeceras, self.texto, self.borrado = str(uid), cabeceras, texto, False
+        self.etiquetas = [b"\\Sent"]
 
 
 class FalsoIMAP:
@@ -39,9 +40,12 @@ class FalsoIMAP:
         self.clave = None
         self.sig = 500
 
-    def agregar(self, carpeta, cabeceras, texto=b""):
+    def agregar(self, carpeta, cabeceras, texto=b"", etiquetas=None):
         self.sig += 1
-        self.carpetas[carpeta].append(FalsoMsg(self.sig, cabeceras, texto))
+        m = FalsoMsg(self.sig, cabeceras, texto)
+        if etiquetas is not None:
+            m.etiquetas = etiquetas
+        self.carpetas[carpeta].append(m)
         return str(self.sig)
 
     def login(self, usuario, clave):
@@ -73,6 +77,11 @@ class FalsoIMAP:
             return "OK", [" ".join(m.uid for m in lista).encode()]
         if cmd == "FETCH":
             m = [x for x in lista if x.uid == args[0]][0]
+            if "X-GM-LABELS" in args[1]:
+                # Como Gmail: entre comillas y con la barra escapada. En la Papelera ya sin Inbox.
+                etiquetas = [] if self.actual == PAPELERA else m.etiquetas
+                lista_e = b" ".join(b'"' + e.replace(b"\\", b"\\\\") + b'"' for e in etiquetas)
+                return "OK", [b"1 (X-GM-LABELS (" + lista_e + b") UID " + m.uid.encode() + b")"]
             carga = m.texto if "TEXT" in args[1] else m.cabeceras
             return "OK", [(b"1 (UID " + m.uid.encode() + b" BODY[] {1}", carga), b")"]
         if cmd == "MOVE":
@@ -250,8 +259,10 @@ class TestImap(Base):
         f = self.falso()
         f.agregar(TODOS, NUESTRO)
         self.assertEqual(correo.borrar_copia(ID), 1)
-        self.assertEqual(f.comandos(), ["LIST", "SELECT", "SEARCH", "FETCH", "MOVE",
-                                        "SELECT", "SEARCH", "FETCH", "STORE", "EXPUNGE"])
+        # Cada verificacion son dos FETCH: cabeceras (S8) y etiquetas (no tocar Recibidos).
+        self.assertEqual(f.comandos(), ["LIST", "SELECT", "SEARCH", "FETCH", "FETCH", "MOVE",
+                                        "SELECT", "SEARCH", "FETCH", "FETCH", "STORE",
+                                        "EXPUNGE"])
         selects = [c[1] for c in f.log if c[0] == "SELECT"]
         self.assertEqual(selects, ['"' + TODOS + '"', '"' + PAPELERA + '"'])
         self.assertEqual(f.carpetas[TODOS], [])
@@ -275,6 +286,41 @@ class TestImap(Base):
             if c[0] in ("MOVE", "STORE"):
                 self.assertEqual(c[1], propio)
         self.assertEqual([m.uid for m in f.carpetas[TODOS]], ajenos)
+
+    def test_no_borra_lo_que_esta_en_recibidos(self):
+        # La cuenta de la tienda se mando el correo a si misma: un solo mensaje con Enviados y
+        # Recibidos. Borrarlo se llevaria el correo que recibio el destinatario.
+        f = self.falso()
+        f.agregar(TODOS, NUESTRO, etiquetas=[b"\\Inbox", b"\\Sent", b"\\Important"])
+        self.assertEqual(correo.borrar_copia(ID), 0)
+        self.assertNotIn("MOVE", f.comandos())
+        self.assertEqual(len(f.carpetas[TODOS]), 1)
+
+    def test_etiquetas_ilegibles_no_se_borra(self):
+        f = self.falso()
+        f.agregar(TODOS, NUESTRO)
+        uid_original = f.uid
+
+        def sin_etiquetas(cmd, *args):
+            if cmd == "FETCH" and "X-GM-LABELS" in args[1]:
+                return "OK", [b"1 (UID 501)"]
+            return uid_original(cmd, *args)
+        f.uid = sin_etiquetas
+        self.assertEqual(correo.borrar_copia(ID), 0)
+        self.assertNotIn("MOVE", f.comandos())
+
+    def test_etiquetas_sin_comillas_tambien_cuentan(self):
+        f = self.falso()
+        f.agregar(TODOS, NUESTRO)
+        uid_original = f.uid
+
+        def crudas(cmd, *args):
+            if cmd == "FETCH" and "X-GM-LABELS" in args[1] and f.actual == TODOS:
+                f.log.append((cmd,) + args)
+                return "OK", [b"1 (X-GM-LABELS (\\Inbox \\Sent) UID 501)"]
+            return uid_original(cmd, *args)
+        f.uid = crudas
+        self.assertEqual(correo.borrar_copia(ID), 0)
 
     def test_sin_nada_que_borrar_no_hay_move_ni_store(self):
         f = self.falso()

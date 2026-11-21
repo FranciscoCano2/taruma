@@ -270,6 +270,32 @@ def _es_nuestro(m, uid, esperado=None):
     return esperado is None or ids[0] == esperado
 
 
+_ETIQUETAS = re.compile(rb"X-GM-LABELS \((?P<l>[^)]*)\)", re.I)
+
+
+def _en_recibidos(m, uid):
+    """True si el mensaje tiene la etiqueta Recibidos (\\Inbox), o si no se puede saber.
+
+    Un correo que la cuenta de la tienda se manda a si misma es UN solo mensaje en Gmail, con
+    Enviados y Recibidos: borrarlo se llevaria tambien el que recibio el destinatario. Ante la
+    duda no se borra: puede quedar una copia en Enviados, pero nunca se pierde uno recibido."""
+    typ, r = m.uid("FETCH", uid, "(X-GM-LABELS)")
+    _ok(typ)
+    for x in r:
+        linea = x[0] if isinstance(x, tuple) else x
+        hallado = _ETIQUETAS.search(linea) if isinstance(linea, bytes) else None
+        if hallado is not None:
+            # Gmail manda "\\Inbox" (barra escapada dentro de comillas) o \Inbox sin comillas.
+            etiquetas = hallado["l"].replace(b"\\\\", b"\\").lower()
+            return b"\\inbox" in etiquetas
+    return True
+
+
+def _borrable(m, uid, esperado=None):
+    """Nuestro (S8) y fuera de Recibidos: solo la copia que quedo en Enviados."""
+    return _es_nuestro(m, uid, esperado) and not _en_recibidos(m, uid)
+
+
 def _es_rebote(m, uid):
     typ, r = m.uid("FETCH", uid, "(BODY.PEEK[TEXT])")
     _ok(typ)
@@ -313,7 +339,7 @@ def borrar_copia(msgid):
     with _imap() as m:
         nombres = _carpetas(m)
         return _limpiar(m, nombres, [
-            (nombres["\\all"], criterio, lambda mm, u: _es_nuestro(mm, u, msgid))])
+            (nombres["\\all"], criterio, lambda mm, u: _borrable(mm, u, msgid))])
 
 
 def _desde(ahora=None):
@@ -331,7 +357,7 @@ def barrer(ahora=None):
     with _imap() as m:
         nombres = _carpetas(m)
         return _limpiar(m, nombres, [
-            (nombres["\\all"], ["SINCE", desde, "FROM", _citar(usuario)], _es_nuestro),
+            (nombres["\\all"], ["SINCE", desde, "FROM", _citar(usuario)], _borrable),
             ("INBOX", ["SINCE", desde, "FROM", "mailer-daemon"], _es_rebote)])
 
 
