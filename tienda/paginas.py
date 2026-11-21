@@ -1,11 +1,12 @@
 """HTML de catalogo y carrito. Todo valor pasa por html.escape y todo texto por textos.t().
 
-Sin JavaScript. La hoja de estilo se sirve aparte (/tienda/estilo.css) para no
-necesitar 'unsafe-inline' si el proxy pone una CSP estricta.
+Sin JavaScript en linea: la hoja de estilo se sirve aparte (/tienda/estilo.css) y la unica
+pagina con script es la del producto, que carga el visor 3D como modulo externo (mejora
+progresiva: sin JS la pagina esta completa). Asi alcanza con la CSP estricta que pone Caddy.
 """
 from html import escape
 
-from tienda import catalogo
+from tienda import catalogo, recursos
 from tienda.textos import t, unidades
 
 PREFIJOS = {"es": "/tienda", "en": "/tienda/en"}
@@ -36,7 +37,33 @@ button{font:inherit;padding:4px 12px;cursor:pointer}
 input{font:inherit;padding:4px 8px;max-width:100%}
 .error{background:#fde8e4;border:1px solid #d08070;padding:8px 12px;border-radius:6px}
 footer{font-size:14px;color:#555}
+img{max-width:100%;height:auto;display:block}
+.producto{position:relative}
+.producto img{width:100%;aspect-ratio:1;border-radius:6px;background:#f1ede6;margin-bottom:8px}
+.producto h3 a{text-decoration:none}
+.producto h3 a::after{content:"";position:absolute;inset:0}
+.producto form{position:relative;z-index:1}
+.detalle{display:grid;gap:16px 32px;grid-template-columns:minmax(0,1fr) minmax(240px,360px);align-items:start}
+@media (max-width:720px){.detalle{grid-template-columns:1fr}}
+.visor{position:relative;aspect-ratio:1;background:#fff;border:1px solid #e4ded3;border-radius:8px;overflow:hidden}
+.visor>img{width:100%;height:100%}
+.ver3d{margin-top:8px}
+.visor-marco{position:absolute;inset:0;display:flex;flex-direction:column}
+.visor-marco model-viewer{flex:1;width:100%;min-height:0;background:#fff}
+.visor-marco.cargando model-viewer{opacity:0}
+.visor-marco model-viewer:focus-visible{outline:3px solid #7a3e12;outline-offset:-3px}
+.visor-carga,.visor-error{position:absolute;left:12px;right:12px;top:12px;background:#fff;border:1px solid #e4ded3;border-radius:6px;padding:8px 12px}
+.visor-carga p,.visor-error p{margin:0 0 6px}
+.visor-carga progress{width:100%}
+.visor-error{border-color:#d08070;background:#fde8e4}
+.visor-ayuda{margin:0;padding:4px 12px;font-size:14px;color:#555;background:#fff}
+.visor-botones{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;border-top:1px solid #e4ded3;background:#fff}
+.visor-botones button{min-width:40px;min-height:40px}
+.visor-botones .visor-cerrar{margin-left:auto}
+.visor-estado:empty{display:none}
+[hidden]{display:none!important}
 """
+ESTILO_V = recursos.version_de(ESTILO)
 
 
 def _e(valor):
@@ -91,7 +118,7 @@ def _cuenta(idioma, ingresada):
     return '<a href="%s/ingresar">%s</a>\n' % (PREFIJOS[idioma], _e(t("nav.ingresar", idioma)))
 
 
-def _documento(idioma, titulo, camino, renglones, contenido, ingresada=False):
+def _documento(idioma, titulo, camino, renglones, contenido, ingresada=False, cabeza=""):
     pre, otro = PREFIJOS[idioma], OTRO[idioma]
     n = sum(c for _, c in _productos(renglones))
     return "".join((
@@ -99,7 +126,8 @@ def _documento(idioma, titulo, camino, renglones, contenido, ingresada=False):
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n',
         "<title>%s</title>\n" % _e(titulo),
         '<meta name="description" content="%s">\n' % _e(t("aviso.tab.descripcion", idioma)),
-        '<link rel="stylesheet" href="/tienda/estilo.css">\n',
+        '<link rel="stylesheet" href="/tienda/estilo.css?v=%s">\n' % ESTILO_V,
+        cabeza,
         '<link rel="alternate" hreflang="%s" href="%s%s">\n' % (otro, PREFIJOS[otro], camino),
         "</head>\n<body>\n",
         '<a class="saltar" href="#contenido">%s</a>\n' % _e(t("nav.saltar", idioma)),
@@ -119,17 +147,33 @@ def _documento(idioma, titulo, camino, renglones, contenido, ingresada=False):
     ))
 
 
+def _imagen(p, idioma, perezosa):
+    return '<img src="%s" width="800" height="800"%s alt="%s">' % (
+        _e(recursos.imagen(p)), ' loading="lazy"' if perezosa else "", _e(p.nombre(idioma)))
+
+
+def _agregar(idioma, csrf, p, volver=""):
+    campo = '<input type="hidden" name="volver" value="producto">' if volver else ""
+    return "".join((
+        '<form method="post" action="%s/carrito/agregar">%s%s' % (
+            PREFIJOS[idioma], _ocultos(csrf, p), campo),
+        '<label>%s <select name="cantidad">%s</select></label>' % (
+            _e(t("carrito.unidades", idioma)), _opciones(1)),
+        '<button type="submit">%s</button></form>\n' % _e(t("ficha.agregar", idioma)),
+    ))
+
+
 def _ficha(idioma, csrf, p):
     rasgos = "".join("<li>%s</li>" % _e(r) for r in p.rasgos(idioma))
     return "".join((
-        '<li class="producto">\n<h3>%s</h3>\n' % _e(p.nombre(idioma)),
+        '<li class="producto">\n%s\n' % _imagen(p, idioma, True),
+        '<h3><a href="%s/producto/%s">%s</a></h3>\n' % (
+            PREFIJOS[idioma], _e(p.numero), _e(p.nombre(idioma))),
         '<p class="muestra">%s</p>\n' % _e(t("etiqueta.muestra", idioma)),
         '<ul class="rasgos">%s</ul>\n' % rasgos,
         '<p class="precio">%s</p>\n' % _e(_chispas(p.precio, idioma)),
-        '<form method="post" action="%s/carrito/agregar">%s' % (PREFIJOS[idioma], _ocultos(csrf, p)),
-        '<label>%s <select name="cantidad">%s</select></label>' % (
-            _e(t("carrito.unidades", idioma)), _opciones(1)),
-        '<button type="submit">%s</button></form>\n</li>\n' % _e(t("ficha.agregar", idioma)),
+        _agregar(idioma, csrf, p),
+        "</li>\n",
     ))
 
 
@@ -148,6 +192,85 @@ def catalogo_html(idioma, csrf, renglones, aviso=None, ingresada=False):
                       % (cat, cat, _e(t("cat." + cat, idioma)), fichas))
     return _documento(idioma, t("aviso.tab.titulo", idioma), "/", renglones, "".join(partes),
                       ingresada)
+
+
+# --- Pagina de producto y visor 3D (T12a) ------------------------------------
+
+def _boton_visor(idioma, clave, accion, simbolo, clase=""):
+    return '<button type="button" data-accion="%s" aria-label="%s"%s>%s</button>' % (
+        accion, _e(t(clave, idioma)), ' class="%s"' % clase if clase else "", simbolo)
+
+
+def _plantilla_visor(idioma):
+    """Lo que arma visor.js. Inerte en un <template>: sin JS no se ve ni hace nada."""
+    def boton(clave, accion):
+        return '<button type="button" data-accion="%s">%s</button>' % (accion, _e(t(clave, idioma)))
+    return "".join((
+        '<template id="visor-plantilla">\n<div class="visor-marco">\n',
+        '<div class="visor-carga">\n<p class="visor-porcentaje"></p>\n',
+        '<progress max="100" value="0" aria-label="%s"></progress>\n'
+        % _e(t("visor.progreso.aria", idioma)),
+        "<p>%s</p>\n%s\n</div>\n" % (_e(t("visor.progreso.nota", idioma)),
+                                    boton("visor.cancelar", "cancelar")),
+        '<div class="visor-error" role="alert" hidden>\n<p>%s</p>\n%s %s\n</div>\n' % (
+            _e(t("visor.error", idioma)), boton("visor.error.boton", "reintentar"),
+            boton("visor.cerrar", "cerrar")),
+        '<p class="visor-ayuda" hidden>%s %s<br>%s</p>\n' % (
+            _e(t("visor.gestos.girar", idioma)), _e(t("visor.gestos.acercar", idioma)),
+            _e(t("visor.teclado.ayuda", idioma))),
+        '<div class="visor-botones" hidden>\n',
+        _boton_visor(idioma, "visor.girar.izquierda", "izquierda", "↺"),
+        _boton_visor(idioma, "visor.girar.derecha", "derecha", "↻"),
+        _boton_visor(idioma, "visor.acercar", "acercar", "+"),
+        _boton_visor(idioma, "visor.alejar", "alejar", "−"),
+        _boton_visor(idioma, "visor.restablecer", "restablecer", "⟲"),
+        '<button type="button" data-accion="cerrar" class="visor-cerrar" aria-label="%s">%s</button>'
+        % (_e(t("visor.cerrar.aria", idioma)), _e(t("visor.cerrar", idioma))),
+        "\n</div>\n</div>\n</template>\n",
+    ))
+
+
+def producto_html(idioma, csrf, renglones, p, aviso=None, ingresada=False):
+    """Imagen grande, rasgos, precio y agregar. El visor 3D es una mejora: el boton nace
+    `hidden` y solo visor.js lo muestra."""
+    rasgos = "".join("<li>%s</li>" % _e(r) for r in p.rasgos(idioma))
+    datos = {
+        "modelo": recursos.modelo(p),
+        "poster": recursos.imagen(p),
+        "mv": recursos.url("js/model-viewer.min.js"),
+        "meshopt": recursos.url("js/meshopt_decoder.js"),
+        "alt": t("visor.lienzo.aria", idioma, producto=p.nombre(idioma)),
+        "progreso": t("visor.progreso", idioma, n="{n}"),
+        "cancelado": t("visor.cancelado", idioma),
+    }
+    atributos = "".join(' data-%s="%s"' % (k, _e(v)) for k, v in datos.items())
+    contenido = "".join((
+        _aviso(idioma, aviso),
+        '<div class="detalle">\n<div>\n',
+        '<div class="visor" id="visor"%s>\n%s\n</div>\n' % (atributos, _imagen(p, idioma, False)),
+        '<button type="button" class="ver3d" aria-controls="visor" hidden>%s</button>\n'
+        % _e(t("ficha.ver3d", idioma)),
+        '<p class="visor-estado" role="status"></p>\n',
+        _plantilla_visor(idioma),
+        "</div>\n<div>\n",
+        "<h1>%s</h1>\n" % _e(p.nombre(idioma)),
+        '<p class="muestra">%s</p>\n' % _e(t("etiqueta.muestra", idioma)),
+        '<ul class="rasgos">%s</ul>\n' % rasgos,
+        '<p class="precio">%s</p>\n' % _e(_chispas(p.precio, idioma)),
+        _agregar(idioma, csrf, p, volver=True),
+        '<p><a href="%s/">%s</a></p>\n' % (PREFIJOS[idioma], _e(t("error.404.boton", idioma))),
+        "</div>\n</div>\n",
+    ))
+    titulo = t("aviso.tab.titulo.pagina", idioma, pagina=p.nombre(idioma))
+    cabeza = '<script type="module" src="%s"></script>\n' % _e(recursos.url("js/visor.js"))
+    return _documento(idioma, titulo, "/producto/" + p.numero, renglones, contenido, ingresada,
+                      cabeza)
+
+
+def no_encontrado_html(idioma, renglones, ingresada=False):
+    contenido = '<p>%s</p>\n<p><a href="%s/">%s</a></p>\n' % (
+        _e(t("error.404.cuerpo", idioma)), PREFIJOS[idioma], _e(t("error.404.boton", idioma)))
+    return _pagina_simple(idioma, "error.404.titulo", "/", renglones, contenido, ingresada)
 
 
 def _renglon(idioma, csrf, p, n):

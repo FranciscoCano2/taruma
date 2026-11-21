@@ -12,7 +12,7 @@ from collections import namedtuple
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
-from tienda import config, correo, datos, limpieza
+from tienda import config, correo, datos, estaticos, limpieza, recursos
 
 MAX_CUERPO = 4096
 MAX_CONEXIONES = 32
@@ -95,6 +95,8 @@ class Manejador(BaseHTTPRequestHandler):
         cabeceras = [("Content-Type", tipo), ("Content-Length", str(len(cuerpo))),
                      ("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff"),
                      ("Referrer-Policy", self.referrer())] + list(extra)
+        if estaticos.directorio():
+            cabeceras.append(("Content-Security-Policy", estaticos.CSP))
         try:
             for nombre, valor in cabeceras:
                 valor_seguro(nombre)
@@ -157,6 +159,12 @@ class Manejador(BaseHTTPRequestHandler):
             return self.responder(404, b"No encontrado")
         self.idioma = "en" if m.group("en") else "es"
         self.resto = m.group("resto") or "/"
+        raiz = estaticos.directorio()
+        if raiz and not m.group("en") and estaticos.RUTA.fullmatch(self.resto):
+            self.nombre = "estaticos"
+            estado, cuerpo, tipo, extra = estaticos.servir(
+                metodo, estaticos.RUTA.fullmatch(self.resto).group("camino"), raiz)
+            return self.responder(estado, cuerpo, tipo or TEXTO, extra)
         posibles = []
         for met, patron, nombre, funcion, registrar in RUTAS:
             coincide = patron.fullmatch(self.resto)
@@ -326,6 +334,10 @@ def main():
     from tienda import compra, ingreso, vistas  # noqa: F401  registran las rutas de las paginas
     CONFIG = config.cargar()
     puerto = _puerto()
+    try:
+        recursos.cargar()
+    except OSError:
+        raise SystemExit("Faltan archivos en estaticos/") from None
     try:
         datos.iniciar(CONFIG.db)
     except sqlite3.Error:
