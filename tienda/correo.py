@@ -131,11 +131,18 @@ def _enviar(msg, para):
     try:
         if not _reservar(ahora):
             raise ErrorCorreo(503)
+        usuario, _, ruta = _ajustes()
         try:
-            usuario, _, ruta = _ajustes()
+            clave = _clave(ruta)
+        except OSError as e:
+            # Sin secreto el correo esta apagado: la tienda sigue y el envio da 503.
+            _devolver(ahora)
+            _registrar("sin_secreto", e)
+            raise ErrorCorreo(503) from None
+        try:
             ctx = ssl.create_default_context()
             with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20, context=ctx) as s:
-                s.login(usuario, _clave(ruta))
+                s.login(usuario, clave)
                 s.send_message(msg, to_addrs=[para])
         except Exception as e:
             _devolver(ahora)
