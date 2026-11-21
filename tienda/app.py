@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Servicio de Taruma: servidor, tabla de rutas, prefijo de idioma, cabeceras y registro."""
+import os
 import re
+import signal
 import socket
+import sqlite3
 import sys
 import threading
 import time
@@ -9,10 +12,12 @@ from collections import namedtuple
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
-from tienda import config, correo, datos
+from tienda import config, correo, datos, limpieza
 
 MAX_CUERPO = 4096
 MAX_CONEXIONES = 32
+PUERTO = 8000
+PLAZO_CIERRE = 8.0  # Podman espera 10 s entre SIGTERM y SIGKILL
 ESCURRIR_PLAZO = 0.2
 ESCURRIR_TOPE = 65536
 MAX_CAMPOS = 20
@@ -193,6 +198,7 @@ class Servidor(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, direccion, manejador, maximo=MAX_CONEXIONES):
+        self.maximo = maximo
         self._cupo = threading.BoundedSemaphore(maximo)
         super().__init__(direccion, manejador)
 
@@ -247,14 +253,102 @@ def instalar_ganchos():
     threading.excepthook = lambda args: escribir_error(args.exc_type.__name__)
 
 
+def _semaforo_libre(srv, plazo):
+    """Espera hasta `plazo` segundos a que terminen las peticiones en curso (toma todos los
+    cupos del servidor). True si terminaron todas."""
+    fin = time.monotonic() + plazo
+    tomados = 0
+    try:
+        while tomados < srv.maximo:
+            if not srv._cupo.acquire(timeout=max(0.0, fin - time.monotonic())):
+                return False
+            tomados += 1
+        return True
+    finally:
+        for _ in range(tomados):
+            srv._cupo.release()
+
+
+def cerrar(srv, plazo=PLAZO_CIERRE):
+    """Despues de serve_forever: deja de aceptar, espera las peticiones en curso y la pasada de
+    limpieza (cada transaccion es BEGIN IMMEDIATE ... COMMIT: si igual se corta, SQLite la
+    deshace entera) y vuelca el WAL a la base."""
+    limpieza.parar()
+    srv.server_close()
+    fin = time.monotonic() + plazo
+    completo = _semaforo_libre(srv, plazo)
+    tomada = limpieza.ocupado.acquire(timeout=max(0.0, fin - time.monotonic()))
+    try:
+        if completo and tomada:
+            datos.conexion().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception as e:
+        escribir_error(type(e).__name__, "cierre")
+    finally:
+        datos.cerrar()
+        if tomada:
+            limpieza.ocupado.release()
+    return completo and tomada
+
+
+def instalar_senales(srv):
+    for senal in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(senal, al_recibir_senal(srv))
+
+
+def al_recibir_senal(srv):
+    """Manejador de SIGTERM/SIGINT. shutdown() espera a que serve_forever salga, y la senal
+    corre en el mismo hilo que serve_forever: por eso va en otro hilo."""
+    def manejar(signum, frame):
+        threading.Thread(target=srv.shutdown, name="cierre", daemon=True).start()
+    return manejar
+
+
+def _secreto_legible(ruta):
+    try:
+        with open(ruta, "rb"):
+            return True
+    except OSError:
+        return False
+
+
+def _puerto(env=None):
+    """8000 siempre en el contenedor. TIENDA_PUERTO es solo para las pruebas (0 = cualquiera)."""
+    valor = (os.environ if env is None else env).get("TIENDA_PUERTO", "").strip()
+    if not valor:
+        return PUERTO
+    if not valor.isdigit() or int(valor) > 65535:
+        raise SystemExit("TIENDA_PUERTO invalida")
+    return int(valor)
+
+
 def main():
     global CONFIG
     from tienda import compra, ingreso, vistas  # noqa: F401  registran las rutas de las paginas
     CONFIG = config.cargar()
-    datos.iniciar(CONFIG.db)
+    puerto = _puerto()
+    try:
+        datos.iniciar(CONFIG.db)
+    except sqlite3.Error:
+        raise SystemExit("No se pudo abrir TIENDA_DB") from None
+    finally:
+        datos.cerrar()
+    if not _secreto_legible(CONFIG.secreto_smtp):
+        # La tienda arranca igual; cada envio responde ErrorCorreo(503) (correo apagado).
+        sys.stderr.write("correo sin_secreto\n")
+        sys.stderr.flush()
     instalar_ganchos()
+    srv = Servidor(("0.0.0.0", puerto), Manejador)
+    instalar_senales(srv)
     correo.iniciar_hilo()
-    Servidor(("0.0.0.0", 8000), Manejador).serve_forever()
+    limpieza.iniciar_hilo()
+    sys.stderr.write("tienda escuchando %d\n" % srv.server_address[1])
+    sys.stderr.flush()
+    try:
+        srv.serve_forever()
+    finally:
+        limpio = cerrar(srv)
+        sys.stderr.write("tienda cerrada%s\n" % ("" if limpio else " con_pendientes"))
+        sys.stderr.flush()
 
 
 if __name__ == "__main__":

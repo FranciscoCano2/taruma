@@ -564,10 +564,14 @@ class Arranque(unittest.TestCase):
                 mock.patch.object(app.datos, "iniciar", orden.iniciar), \
                 mock.patch.object(app, "instalar_ganchos"), \
                 mock.patch.object(app.correo, "iniciar_hilo", orden.hilo), \
+                mock.patch.object(app, "_secreto_legible", return_value=True), \
+                mock.patch.object(app, "instalar_senales"), \
+                mock.patch.object(app, "cerrar"), \
+                mock.patch.object(app.limpieza, "iniciar_hilo", orden.limpieza), \
                 mock.patch.object(app, "Servidor"), \
                 mock.patch.object(app, "CONFIG", None):
             app.main()
-        self.assertEqual([c[0] for c in orden.mock_calls], ["iniciar", "hilo"])
+        self.assertEqual([c[0] for c in orden.mock_calls], ["iniciar", "hilo", "limpieza"])
 
     def test_rutas_registradas(self):
         nombres = {n for _, _, n, _, _ in app.RUTAS}
