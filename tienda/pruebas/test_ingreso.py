@@ -300,7 +300,9 @@ class Ingresar(Base):
         self.assertIn("set-cookie", cab)
         self.assertIn(t("error.apagada.cuerpo"), html)
         self.assertEqual(self.enviados, [])
-        self.assertIsNone(self.correo_guardado())
+        # El correo se guarda antes del envio; sin canje la sesion sigue sin ingresar (T10).
+        self.assertEqual(self.correo_guardado(), ANA)
+        self.assertEqual(self.ses()["ingresada"], 0)
 
     def test_error_correo_500_sin_datos_en_la_salida(self):
         self.falla_smtp = smtplib.SMTPRecipientsRefused({ANA: (550, b"x")})
@@ -312,7 +314,8 @@ class Ingresar(Base):
         self.assertNotIn(ANA, html)
         self.assertIn("correo smtp_fallo SMTPRecipientsRefused", err.getvalue())
         self.assertNotIn(ANA, out.getvalue() + err.getvalue())
-        self.assertIsNone(self.correo_guardado())
+        self.assertEqual(self.correo_guardado(), ANA)
+        self.assertEqual(self.ses()["ingresada"], 0)
 
     def test_con_sesion_exige_csrf_y_origen(self):
         self.agregar("03")
@@ -360,7 +363,7 @@ class Entrar(Base):
         token = self.pedido()
         vieja = self.cookie
         estado, cab, _ = self.post("/tienda/entrar", {"t": token})
-        self.assertEqual((estado, cab["location"]), (303, "/tienda/?aviso=entraste"))
+        self.assertEqual((estado, cab["location"]), (303, "/tienda/checkout?aviso=entraste"))
         self.assertRegex(cab["set-cookie"], r"^__Host-taruma_sesion=[A-Za-z0-9_-]{43}; Path=/;"
                                             r" Secure; HttpOnly; SameSite=Lax; Max-Age=7200$")
         self.assertNotEqual(self.cookie, vieja)

@@ -123,8 +123,15 @@ def _post(p, destino, accion, con_cantidad=True):
         ses, extra = _vigente(p)
         if ses is None:
             return _error(403)
+    h = sesion.hash_id(ses["id"])
     with datos.inmediata():
-        aviso = accion(sesion.hash_id(ses["id"]), producto, n)
+        # Mientras se manda el correo de la compra (T10) el pedido no cambia. Se lee dentro de
+        # la transaccion: marcar_comprando no puede colarse entre la lectura y la escritura.
+        fila = datos.sesion_por_hash(h)
+        if fila is not None and fila["comprando"]:
+            aviso = "comprando"
+        else:
+            aviso = accion(h, producto, n)
     return _volver(p, destino, aviso, extra)
 
 

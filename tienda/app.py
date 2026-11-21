@@ -249,7 +249,7 @@ def instalar_ganchos():
 
 def main():
     global CONFIG
-    from tienda import ingreso, vistas  # noqa: F401  registran las rutas de las paginas
+    from tienda import compra, ingreso, vistas  # noqa: F401  registran las rutas de las paginas
     CONFIG = config.cargar()
     datos.iniciar(CONFIG.db)
     instalar_ganchos()

@@ -86,6 +86,10 @@ def post_ingresar(p):
     ses = sesion.actual(p.headers.get("Cookie"))
     if ses is not None and not sesion.verificar_csrf(ses, p.campos.get("csrf")):
         return vistas._error(403)
+    if vistas._ingresada(ses):
+        # Ya entro: cambiar el correo ahora lo dejaria ingresado con una direccion sin
+        # comprobar (T10). La pagina ya no ofrece el formulario; un POST armado no cambia nada.
+        return _ir(p, "/ingresar")
     escrito = p.campos.get("correo")
     escrito = escrito.strip() if isinstance(escrito, str) else ""
     direccion = limites.validar_correo(escrito)
@@ -106,15 +110,27 @@ def post_ingresar(p):
         return _mensaje(p, 429, "error.intentos", ses, extra)
     if resultado == "tope":
         return _mensaje(p, 503, "error.apagada", ses, extra)
+    if resultado not in ("ok", "silencioso"):
+        raise RuntimeError("pedir_enlace")
+    # Antes de crear y mandar el enlace, en una sola transaccion: se borran los enlaces vivos
+    # de la sesion y se guarda la direccion nueva. Asi el unico enlace canjeable de la sesion
+    # es siempre el del correo guardado: entre esta transaccion y enlace.crear no hay ninguno,
+    # y despues solo el de `direccion`. Si no, canjear un enlace anterior podia dejar la sesion
+    # ingresada con una direccion que nadie demostro tener, y la compra (T10) le mandaria el
+    # correo de gracias. Si el envio falla, el correo queda guardado pero sin enlace vivo e
+    # ingresada en 0 (una sesion ingresada no llega hasta aca): con el no se puede comprar.
+    with datos.inmediata():
+        datos.enlaces_borrar(h)
+        guardado = datos.sesion_poner_correo(h, direccion)
+    if not guardado:
+        # La sesion se roto (canje) o se borro en el medio: no mandamos nada.
+        return vistas._error(403)
     if resultado == "ok":
         fallo = _enviar(p, ses, direccion)
         if fallo is not None:
             return fallo._replace(cabeceras=tuple(fallo.cabeceras) + extra)
-    elif resultado == "silencioso":
-        _simular_envio()
     else:
-        raise RuntimeError("pedir_enlace")
-    datos.sesion_poner_correo(h, direccion)
+        _simular_envio()
     return _ir(p, "/ingresar/enviado", extra)
 
 
@@ -160,7 +176,8 @@ def post_entrar(p):
         limites.canje_fallido(ip)
         base = "ingreso.vencido" if enlace.validar(token) == "vencido" else "ingreso.enlace"
         return _mensaje(p, 400, base, actual)
-    return _ir(p, "/?aviso=entraste", (("Set-Cookie", sesion.cabecera_cookie(nueva["id"])),))
+    destino = "/checkout?aviso=entraste" if vistas._renglones(nueva) else "/?aviso=entraste"
+    return _ir(p, destino, (("Set-Cookie", sesion.cabecera_cookie(nueva["id"])),))
 
 
 # --- Salir -------------------------------------------------------------------
