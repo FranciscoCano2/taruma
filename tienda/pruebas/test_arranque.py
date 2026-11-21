@@ -37,6 +37,7 @@ class Proceso(unittest.TestCase):
             d.mkdir()
         # Copia del codigo sin pruebas ni __pycache__, como el clon montado en /app.
         shutil.copy(RAIZ / "arrancar.py", self.codigo)
+        shutil.copy(RAIZ / "salud.py", self.codigo)
         (self.codigo / "tienda").mkdir()
         for f in (RAIZ / "tienda").glob("*.py"):
             shutil.copy(f, self.codigo / "tienda")
@@ -76,6 +77,8 @@ class Proceso(unittest.TestCase):
             r = c.getresponse()
             self.assertEqual((r.status, r.read()), (200, b"ok"))
             c.close()
+            # El chequeo de salud del contenedor, tambien con -I y sin comillas que desarmar.
+            self.assertEqual(self.salud(puerto), 0)
             if os.name == "posix":
                 p.send_signal(signal.SIGTERM)
                 self.assertEqual(p.wait(timeout=15), 0)
@@ -102,6 +105,18 @@ class Proceso(unittest.TestCase):
         nombres = {f.name for f in self.datos.iterdir()}
         self.assertIn("taruma.db", nombres)
         self.assertLessEqual(nombres, {"taruma.db", "taruma.db-wal", "taruma.db-shm"})
+
+    def salud(self, puerto):
+        return subprocess.run(
+            [sys.executable, "-I", str(self.codigo / "salud.py")], cwd=self.cwd,
+            env=entorno(TIENDA_PUERTO=str(puerto)), capture_output=True, timeout=15).returncode
+
+    def test_salud_falla_sin_servidor(self):
+        import socket
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            libre = s.getsockname()[1]
+        self.assertEqual(self.salud(libre), 1)
 
     def test_falta_configuracion(self):
         for falta in ("TIENDA_URL_BASE", "TIENDA_DB"):

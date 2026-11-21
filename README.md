@@ -7,6 +7,7 @@ Corre en `/tienda` del portfolio (repo `arya-web`), detrás de Caddy. Usa solo l
 ## Estructura
 
 - `arrancar.py`: punto de arranque en el contenedor (`python3 -I /app/arrancar.py`).
+- `salud.py`: chequeo de salud del contenedor (`python3 -I /app/salud.py`, sale con 0 si `/tienda/salud` responde `ok`).
 - `tienda/app.py`: servidor HTTP, tabla de rutas, prefijo de idioma (`/tienda` y `/tienda/en`), cabeceras y registro.
 - `tienda/config.py`: lee la configuración del entorno.
 - `tienda/datos.py`: esquema SQLite y consultas.
@@ -72,7 +73,7 @@ Este es el contrato con el despliegue (Quadlet `tienda.container` y Caddy, en `a
 - **Entorno:** `TIENDA_URL_BASE` (el origen público) y `TIENDA_DB` obligatorias; `SMTP_USUARIO`, `RESPONDER_A` y `RECURSOS_V` opcionales.
 - **Secreto:** la contraseña SMTP se lee del archivo `TIENDA_SECRETO_SMTP`, por defecto `/run/secrets/tienda_smtp` (un secreto de Podman). Sin él la tienda funciona y los envíos dan 503.
 - **IP del cliente:** solo de `X-Real-IP`, que pone Caddy. Nunca `X-Forwarded-For`.
-- **Salud:** `GET /tienda/salud` → `200 ok`, sin registro.
+- **Salud:** `GET /tienda/salud` → `200 ok`, sin registro. Para el `HealthCmd` del Quadlet: `python3 -I /app/salud.py` (sin comillas: Quadlet desarma las de `HealthCmd`).
 - **Fallos al arrancar:** si falta una variable obligatoria o no se puede abrir la base, sale con código 1 y una línea sin valores (`Falta la variable TIENDA_DB`, `No se pudo abrir TIENDA_DB`).
 - **Parada:** `SIGTERM` (`podman stop`) deja de aceptar conexiones, espera hasta 8 s a las peticiones en curso y a la pasada de limpieza (Podman espera 10 s antes de `SIGKILL`), vuelca el WAL a la base y sale con 0. Cada escritura es una transacción, así que aun un `SIGKILL` no deja la base a medio escribir: SQLite deshace lo que no llegó al `COMMIT`.
 - **Registro:** stdout lleva una línea por petición (`método ruta estado ms`); stderr, eventos sin datos (`tienda escuchando 8000`, `limpieza sesiones=3 …`, tipos de error).
