@@ -21,7 +21,10 @@ Corre en `/tienda` del portfolio (repo `arya-web`), detrás de Caddy. Usa solo l
 - `tienda/ingreso.py`: rutas de ingreso con enlace mágico y salida.
 - `tienda/compra.py`: resumen (`/checkout`), compra de prueba con correo de gracias y confirmación. Al comprar se borra la sesión con el correo; solo queda un contador anónimo.
 - `tienda/limpieza.py`: hilo `limpieza`, borra cada 5 minutos lo vencido.
-- `tienda/paginas.py`: HTML de todas las páginas (sin JavaScript) y hoja de estilo.
+- `tienda/paginas.py`: HTML de todas las páginas y hoja de estilo. Sin scripts ni estilos en línea; solo la página de producto carga un script (el visor 3D, externo).
+- `tienda/recursos.py`: URL de `estaticos/` y versión (`?v=`) de los `.js`, calculada al arrancar.
+- `tienda/estaticos.py`: solo para desarrollo, sirve `estaticos/` con `TIENDA_ESTATICOS` (ver abajo).
+- `estaticos/`: modelos `.glb`, imágenes `.webp`, `js/model-viewer.min.js`, `js/meshopt_decoder.js` y `js/visor.js` (el visor). En producción los sirve Caddy. Licencias en `estaticos/LICENCIAS.md`.
 - `tienda/pruebas/`: pruebas.
 
 ## Probar
@@ -39,11 +42,30 @@ Viene por variables de entorno. Ningún secreto va en el repo.
 - `TIENDA_URL_BASE` (obligatoria): origen público, sin barra final.
 - `TIENDA_DB` (obligatoria): ruta del archivo SQLite.
 - `SMTP_USUARIO`, `RESPONDER_A`: cuenta que envía y dirección de respuesta.
-- `RECURSOS_V`: versión de los recursos estáticos, para invalidar la caché.
+- `RECURSOS_V`: ya no se usa (la versión de los recursos es el hash de su contenido, ver abajo). Se sigue leyendo para no romper el despliegue.
 - `TIENDA_SECRETO_SMTP`: archivo con la contraseña de aplicación de SMTP (por defecto `/run/secrets/tienda_smtp`). Se lee en cada conexión. Si no se puede leer, la tienda arranca igual (avisa `correo sin_secreto` en stderr) y cada envío responde 503, como con el correo apagado.
 - `TIENDA_PUERTO`: solo para las pruebas (`0` = cualquiera libre). En el contenedor no se pone y escucha en 8000.
+- `TIENDA_ESTATICOS`: solo para desarrollo, ver "Recursos 3D". En producción no se pone.
 
-## Rutas (estado en T10)
+## Recursos 3D y visor (T12a)
+
+- **Quién los sirve:** en producción, Caddy sirve el directorio `estaticos/` del repo en `/tienda/estaticos/…` (por ejemplo `/tienda/estaticos/modelos/boombox.glb`). La tienda no los sirve.
+- **Versión:** las URL de `.js` y `.css` llevan `?v=<hash>`, los primeros 10 caracteres del SHA-256 del contenido, calculados al arrancar (Caddy les pone 30 días de caché). Vale para `/tienda/estilo.css` y para `visor.js`, `model-viewer.min.js` y `meshopt_decoder.js`. Si falta alguno de esos `.js`, la tienda no arranca (`Faltan archivos en estaticos/`).
+- **CSP:** la pone Caddy en `/tienda*` y todo funciona bajo ella: `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' data: blob:; worker-src 'self' blob:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`. El HTML no tiene scripts, estilos ni atributos `on*` en línea.
+- **Mejora progresiva:** sin JavaScript, la página de producto (`/producto/NN`) muestra imagen, rasgos, precio y el formulario de agregar; el botón "Ver en 3D" nace `hidden`. `visor.js` lo muestra y, al apretarlo, recién ahí importa `model-viewer.min.js` y arma el visor sobre la imagen fija (progreso, cancelar, error con reintentar, girar, acercar, alejar, restablecer, cerrar, `Esc`). Todos los textos vienen del HTML del servidor (`data-*` y `<template id="visor-plantilla">`).
+- **model-viewer y la CSP:** model-viewer mete un `<style>` en su shadow DOM, que `style-src 'self'` bloquearía. `visor.js` lo saca antes de conectar el elemento y pasa ese CSS a una hoja construida (`adoptedStyleSheets`). El decodificador meshopt es la copia local (`meshoptDecoderLocation`); no se usa ningún CDN.
+
+### Probar en local
+
+Con `TIENDA_ESTATICOS` (un directorio), la tienda sirve `/tienda/estaticos/…` desde ahí y agrega la misma CSP que Caddy a todas sus respuestas. Solo `GET`/`HEAD` (otro método da 405), sin `..` ni rutas raras, y solo estas extensiones: `.glb` (`model/gltf-binary`), `.webp` (`image/webp`), `.js` (`text/javascript`) y `.css` (`text/css`). Sin la variable, nada de esto existe (404 y sin CSP).
+
+```bash
+TIENDA_URL_BASE=http://localhost:8765 TIENDA_DB=/tmp/taruma.db TIENDA_PUERTO=8765 TIENDA_ESTATICOS=estaticos PYTHONPATH=. python -m tienda.app
+```
+
+Y abrir `http://localhost:8765/tienda/producto/03`.
+
+## Rutas (estado en T12a)
 
 Todas bajo `/tienda` y, en inglés, bajo `/tienda/en`.
 
@@ -52,8 +74,10 @@ Todas bajo `/tienda` y, en inglés, bajo `/tienda/en`.
 | GET | `/salud` | `200 ok`, sin registro | T01 |
 | GET | `/` | catálogo | T08 |
 | GET | `/carrito` | carrito | T08 |
-| POST | `/carrito/agregar`, `/carrito/cantidad`, `/carrito/quitar` | cambian el carrito (PRG, la sesión nace en el primer POST válido) | T08 |
-| GET | `/estilo.css` | hoja de estilo, sin registro | T08 |
+| GET | `/producto/NN` | página de producto con visor 3D (404 en HTML si no existe) | T12a |
+| POST | `/carrito/agregar`, `/carrito/cantidad`, `/carrito/quitar` | cambian el carrito (PRG, la sesión nace en el primer POST válido; `volver=producto` vuelve a la página del producto) | T08 |
+| GET | `/estilo.css` | hoja de estilo, sin registro (se pide con `?v=`) | T08 |
+| GET / HEAD | `/estaticos/…` | solo con `TIENDA_ESTATICOS` (desarrollo) | T12a |
 | GET / POST | `/ingresar` | formulario / pide el enlace mágico | T09 |
 | GET | `/ingresar/enviado` | "revisá tu correo" | T09 |
 | GET / POST | `/entrar` | valida el enlace sin consumirlo / lo canjea y rota la sesión | T09 |
@@ -66,7 +90,7 @@ Todas bajo `/tienda` y, en inglés, bajo `/tienda/en`.
 Este es el contrato con el despliegue (Quadlet `tienda.container` y Caddy, en `arya-web`). Si cambia, cambia en los dos lados.
 
 - **Imagen:** `docker.io/library/python` oficial (3.12 o más nueva), sin pip ni paquetes extra.
-- **Código:** un clon de este repo montado de solo lectura en `/app`. El sistema de archivos del contenedor es de solo lectura, con `/tmp` en tmpfs.
+- **Código:** un clon de este repo montado de solo lectura en `/app`, con `estaticos/` (Caddy sirve ese mismo directorio en `/tienda/estaticos/`). El sistema de archivos del contenedor es de solo lectura, con `/tmp` en tmpfs.
 - **Arranque:** `python3 -I /app/arrancar.py`. Con `-I` Python no agrega ni el directorio del script ni el actual a `sys.path` ni lee las variables `PYTHON*`; `arrancar.py` agrega su propio directorio y apaga los `__pycache__` (`sys.dont_write_bytecode`), así que no escribe nada en `/app`.
 - **Escucha** en `0.0.0.0:8000`.
 - **Datos:** solo escribe `TIENDA_DB` y sus `-wal`/`-shm`. En el servidor, `TIENDA_DB=/datos/taruma.db` sobre un volumen escribible.

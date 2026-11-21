@@ -41,6 +41,8 @@ class Proceso(unittest.TestCase):
         (self.codigo / "tienda").mkdir()
         for f in (RAIZ / "tienda").glob("*.py"):
             shutil.copy(f, self.codigo / "tienda")
+        # estaticos/ viene en el mismo clon: la version de los .js se calcula al arrancar.
+        shutil.copytree(RAIZ / "estaticos" / "js", self.codigo / "estaticos" / "js")
         self.db = self.datos / "taruma.db"
 
     def tearDown(self):
@@ -132,6 +134,11 @@ class Proceso(unittest.TestCase):
         ruta = str(self.datos / "secreta-ruta" / "x.db")
         codigo, _, err = self.correr(entorno(TIENDA_URL_BASE=BASE, TIENDA_DB=ruta))
         self.assertEqual((codigo, err), (1, "No se pudo abrir TIENDA_DB\n"))
+
+    def test_faltan_estaticos(self):
+        shutil.rmtree(self.codigo / "estaticos")
+        codigo, _, err = self.correr(entorno(TIENDA_URL_BASE=BASE, TIENDA_DB=str(self.db)))
+        self.assertEqual((codigo, err), (1, "Faltan archivos en estaticos/\n"))
 
     def test_puerto_invalido(self):
         codigo, _, err = self.correr(entorno(TIENDA_URL_BASE=BASE, TIENDA_DB=str(self.db),

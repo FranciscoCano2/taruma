@@ -58,6 +58,20 @@ def ver_carrito(p):
     return _pagina(p, paginas.carrito_html)
 
 
+@ruta("GET", "/producto/(?P<numero>[^/]*)", "producto")
+def ver_producto(p):
+    """404 (en HTML, en su idioma) si el numero no es de un producto. GET no crea sesion."""
+    ses, extra = _vigente(p)
+    renglones, ingresada = _renglones(ses), _ingresada(ses)
+    producto = catalogo.por_numero(p.coincidencia.group("numero"))
+    if producto is None:
+        cuerpo = paginas.no_encontrado_html(p.idioma, renglones, ingresada)
+        return Respuesta(404, cuerpo.encode("utf-8"), app.HTML, extra)
+    cuerpo = paginas.producto_html(p.idioma, ses and ses["csrf"], renglones, producto,
+                                   p.consulta.get("aviso"), ingresada)
+    return Respuesta(200, cuerpo.encode("utf-8"), app.HTML, extra)
+
+
 @ruta("GET", "/estilo\\.css", "estilo", registrar=False)
 def estilo(p):
     return Respuesta(200, paginas.ESTILO, CSS)
@@ -137,7 +151,12 @@ def _post(p, destino, accion, con_cantidad=True):
 
 @ruta("POST", "/carrito/agregar", "carrito_agregar")
 def post_agregar(p):
-    return _post(p, "/", agregar)
+    """Desde la pagina del producto (volver=producto) vuelve a ella; si no, al catalogo."""
+    destino = "/"
+    producto = catalogo.por_numero(p.campos.get("producto"))
+    if p.campos.get("volver") == "producto" and producto is not None:
+        destino = "/producto/" + producto.numero
+    return _post(p, destino, agregar)
 
 
 @ruta("POST", "/carrito/cantidad", "carrito_cantidad")
