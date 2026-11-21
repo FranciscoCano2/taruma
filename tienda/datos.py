@@ -135,6 +135,13 @@ def rotar_sesion(viejo, nuevo, csrf, ahora=None):
     return c.rowcount == 1
 
 
+def sesion_poner_correo(id_hash, correo):
+    """Guarda el correo de la sesion (lo usa la compra). True si la sesion estaba."""
+    c = conexion().execute(
+        "UPDATE sesiones SET correo = ? WHERE id_hash = ?", (correo, id_hash))
+    return c.rowcount == 1
+
+
 def borrar_sesion(id_hash):
     c = conexion().execute(
         "DELETE FROM sesiones WHERE id_hash = ?", (id_hash,))

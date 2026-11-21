@@ -9,7 +9,7 @@ from collections import namedtuple
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
-from tienda import config, datos
+from tienda import config, correo, datos
 
 MAX_CUERPO = 4096
 MAX_CONEXIONES = 32
@@ -249,10 +249,11 @@ def instalar_ganchos():
 
 def main():
     global CONFIG
-    from tienda import vistas  # noqa: F401  registra las rutas de las paginas
+    from tienda import ingreso, vistas  # noqa: F401  registran las rutas de las paginas
     CONFIG = config.cargar()
     datos.iniciar(CONFIG.db)
     instalar_ganchos()
+    correo.iniciar_hilo()
     Servidor(("0.0.0.0", 8000), Manejador).serve_forever()
 
 

@@ -37,10 +37,14 @@ def _renglones(ses):
     return [] if ses is None else datos.carrito_leer(sesion.hash_id(ses["id"]))
 
 
+def _ingresada(ses):
+    return bool(ses and ses["ingresada"])
+
+
 def _pagina(p, armar):
     ses, extra = _vigente(p)
     aviso = p.consulta.get("aviso")
-    cuerpo = armar(p.idioma, ses and ses["csrf"], _renglones(ses), aviso)
+    cuerpo = armar(p.idioma, ses and ses["csrf"], _renglones(ses), aviso, _ingresada(ses))
     return Respuesta(200, cuerpo.encode("utf-8"), app.HTML, extra)
 
 

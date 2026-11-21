@@ -344,6 +344,7 @@ class Arranque(unittest.TestCase):
         with mock.patch.object(app.config, "cargar", return_value=conf), \
                 mock.patch.object(app.datos, "iniciar") as iniciar, \
                 mock.patch.object(app, "instalar_ganchos"), \
+                mock.patch.object(app.correo, "iniciar_hilo"), \
                 mock.patch.object(app, "Servidor") as srv, \
                 mock.patch.object(app, "CONFIG", None):
             app.main()
