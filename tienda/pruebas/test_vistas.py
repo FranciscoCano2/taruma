@@ -345,6 +345,10 @@ class Arranque(unittest.TestCase):
                 mock.patch.object(app.datos, "iniciar") as iniciar, \
                 mock.patch.object(app, "instalar_ganchos"), \
                 mock.patch.object(app.correo, "iniciar_hilo"), \
+                mock.patch.object(app, "_secreto_legible", return_value=True), \
+                mock.patch.object(app, "instalar_senales"), \
+                mock.patch.object(app, "cerrar"), \
+                mock.patch.object(app.limpieza, "iniciar_hilo"), \
                 mock.patch.object(app, "Servidor") as srv, \
                 mock.patch.object(app, "CONFIG", None):
             app.main()
