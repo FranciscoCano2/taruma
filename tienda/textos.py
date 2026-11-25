@@ -53,6 +53,11 @@ TEXTOS.update({
     "idioma.aria": ("Cambiar idioma", "Change language"),
     "idioma.es": ("Español", "Español"),
     "idioma.en": ("English", "English"),
+    "idioma.leer.es": ("Leer esta página en español", "Leer esta página en español"),
+    "idioma.leer.en": ("Read this page in English", "Read this page in English"),
+    "nav.principal": ("Principal", "Main"),
+    "nav.marca.aria": ("Tarumá, ir al catálogo", "Tarumá, go to catalog"),
+    "ficha.cantidad.aria": ("Cantidad de {producto}", "Quantity of {producto}"),
     "salir.boton": ("Salir", "Sign out"),
     "salir.confirmar.titulo": ("¿Salir ahora?", "Sign out now?"),
     "salir.confirmar.cuerpo": (

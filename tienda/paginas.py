@@ -6,62 +6,210 @@ progresiva: sin JS la pagina esta completa). Asi alcanza con la CSP estricta que
 """
 from html import escape
 
-from tienda import catalogo, recursos
+from tienda import catalogo, marca, recursos
 from tienda.textos import t, unidades
 
 PREFIJOS = {"es": "/tienda", "en": "/tienda/en"}
 OTRO = {"es": "en", "en": "es"}
+EXITOS = ("agregado", "entraste", "saliste")
 AVISOS = {"agregado": "ficha.agregado", "saldo": "carrito.sin_saldo", "maximo": "carrito.maximo",
           "entraste": "ingreso.hecho", "saliste": "salir.hecho", "comprando": "carrito.comprando"}
 PORTFOLIO = "/"
 
-ESTILO = b"""*{box-sizing:border-box}
-body{margin:0;font:16px/1.5 system-ui,sans-serif;color:#222;background:#faf8f4}
-a{color:#7a3e12}
-.saltar{position:absolute;left:-999px}.saltar:focus{left:8px;top:8px;background:#fff;padding:4px}
-.franja{margin:0;padding:6px 16px;background:#7a3e12;color:#fff;font-size:14px}
-header,main,footer{max-width:960px;margin:0 auto;padding:12px 16px}
-header{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline}
-.marca{font-weight:700;font-size:22px;text-decoration:none}
-nav{display:flex;gap:16px;margin-left:auto}
-.productos,.renglones,.rasgos{list-style:none;padding:0;margin:0}
-.productos{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
-.producto,.renglon{background:#fff;border:1px solid #e4ded3;border-radius:8px;padding:12px 16px}
-.renglon{margin-bottom:12px}
-.muestra{display:inline-block;font-size:12px;border:1px dashed #999;padding:0 6px}
-.precio,.total{font-weight:700}
-.aviso{background:#fff4d6;border:1px solid #e0c060;padding:8px 12px;border-radius:6px}
-form{display:inline-flex;gap:8px;align-items:center;margin:4px 8px 4px 0}
-button{font:inherit;padding:4px 12px;cursor:pointer}
-.boton{display:inline-block;background:#7a3e12;color:#fff;padding:6px 16px;border-radius:6px;text-decoration:none}
-input{font:inherit;padding:4px 8px;max-width:100%}
-.error{background:#fde8e4;border:1px solid #d08070;padding:8px 12px;border-radius:6px}
-footer{font-size:14px;color:#555}
+ESTILO = rb"""/* Taruma: hoja de estilo. Tokens de T2 (auditoria y direccion visual): cafe y papel, una serif
+   del sistema para los titulos, bordes de 1,5 y 2 px, sombras y duraciones. Sin fuentes web. */
+:root{
+--cafe-900:#3f1f08;--cafe-800:#5e2f0d;--cafe-700:#7a3e12;--cafe-500:#9b5a24;
+--cafe-200:#e8d3bc;--cafe-100:#f3e6d8;--miel-300:#e8b77a;--miel-100:#fff4d6;
+--papel:#faf8f4;--superficie:#fff;--tinta:#231a14;--tinta-2:#5c5046;
+--borde:#d6cab8;--borde-control-color:#8c7a69;
+--hoja:#4f6b3a;--hoja-100:#eef2e6;--fruto:#5a2d52;--error:#a33a22;--error-100:#fde8e4;
+--f-display:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+--f-texto:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+--r-chico:6px;--r-medio:10px;--r-grande:16px;--r-pildora:999px;
+--borde-fino:1.5px solid var(--borde);
+--borde-control:2px solid var(--borde-control-color);
+--foco:2px solid var(--cafe-700);
+--sombra-1:0 1px 2px rgb(63 31 8/.06),0 1px 1px rgb(63 31 8/.04);
+--sombra-2:0 10px 24px -8px rgb(63 31 8/.22),0 2px 4px rgb(63 31 8/.06);
+--sombra-3:0 18px 40px -12px rgb(63 31 8/.28);
+--dur-rapida:120ms;--dur-media:200ms;--dur-lenta:320ms;
+--curva-salida:cubic-bezier(.2,.7,.2,1);--curva-estandar:cubic-bezier(.4,0,.2,1);
+--tactil:44px;--ancho:1080px;
+}
+*{box-sizing:border-box}
+body{margin:0;font:16px/24px var(--f-texto);color:var(--tinta);background:var(--papel)}
+a{color:var(--cafe-700)}
+a:hover{color:var(--cafe-800)}
+a:focus-visible,select:focus-visible,input:focus-visible,button:focus-visible{outline:var(--foco);outline-offset:2px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;margin:0}
+h1{font-size:40px;line-height:44px;margin-bottom:16px}
+h2{font-size:26px;line-height:32px;margin-bottom:16px}
+h3{font-size:19px;line-height:24px}
+p{margin:0 0 12px}
+.saltar{position:absolute;left:-999px}
+.saltar:focus{left:8px;top:8px;z-index:10;background:var(--superficie);padding:8px 12px;border-radius:var(--r-chico)}
+.franja{margin:0;padding:7px 16px;background:var(--cafe-900);color:var(--papel);font-size:13px;line-height:20px;text-align:center}
+
+/* Cabecera: franja cafe clara a todo el ancho, con borde cafe. */
+.cabecera{background:var(--cafe-100);border-bottom:2px solid var(--cafe-500)}
+.cabecera header{display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;max-width:var(--ancho);margin:0 auto;padding:14px 24px}
+.marca{display:inline-flex;align-items:center;gap:8px;min-height:var(--tactil);border-radius:var(--r-medio);color:var(--cafe-700);font:600 24px/1 var(--f-display);text-decoration:none}
+.marca:hover{color:var(--cafe-800)}
+.marca:focus-visible{outline-offset:4px}
+.marca svg{width:34px;height:34px;flex:none}
+.lema{padding-left:16px;border-left:1.5px solid #c9b39a;font-size:14px;line-height:24px;color:var(--tinta-2)}
+.cabecera nav{display:flex;align-items:center;gap:4px;margin-left:auto}
+.cabecera nav a{position:relative;display:inline-flex;align-items:center;gap:8px;min-height:var(--tactil);padding:0 14px;border-radius:var(--r-medio);color:var(--tinta);font-size:15px;font-weight:500;text-decoration:none;transition:background-color var(--dur-media) var(--curva-estandar),color var(--dur-media) var(--curva-estandar)}
+.cabecera nav a:hover{background:var(--cafe-200);color:var(--cafe-900)}
+.cabecera nav a[aria-current="page"]{color:var(--cafe-700);font-weight:600}
+.cabecera nav a[aria-current="page"]::after{content:"";position:absolute;left:14px;right:14px;bottom:5px;height:3px;border-radius:2px;background:var(--cafe-700)}
+.insignia{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--r-pildora);background:var(--cafe-700);color:var(--papel);font-size:12px;font-weight:700}
+.idioma{display:flex;align-items:center;gap:2px;border:var(--borde-control);border-radius:var(--r-pildora)}
+.idioma span,.idioma a{display:inline-flex;align-items:center;justify-content:center;min-width:48px;min-height:40px;padding:0 12px;border-radius:var(--r-pildora);font-size:14px;font-weight:600;text-decoration:none}
+.idioma span{background:var(--cafe-700);color:var(--papel)}
+.idioma a{color:var(--tinta);transition:background-color var(--dur-media) var(--curva-estandar)}
+.idioma a:hover{background:var(--cafe-200);color:var(--cafe-900)}
+
+main{max-width:var(--ancho);margin:0 auto;padding:40px 24px 64px}
+footer{margin-top:16px;border-top:var(--borde-fino);font-size:14px;color:var(--tinta-2)}
+footer p{max-width:var(--ancho);margin:0 auto;padding:20px 24px 32px}
 img{max-width:100%;height:auto;display:block}
-.producto{position:relative}
-.producto img{width:100%;aspect-ratio:1;border-radius:6px;background:#f1ede6;margin-bottom:8px}
-.producto h3 a{text-decoration:none}
-.producto h3 a::after{content:"";position:absolute;inset:0}
-.producto form{position:relative;z-index:1}
-.detalle{display:grid;gap:16px 32px;grid-template-columns:minmax(0,1fr) minmax(240px,360px);align-items:start}
-@media (max-width:720px){.detalle{grid-template-columns:1fr}}
-.visor{position:relative;aspect-ratio:1;background:#fff;border:1px solid #e4ded3;border-radius:8px;overflow:hidden}
-.visor>img{width:100%;height:100%}
-.ver3d{margin-top:8px}
+.productos,.renglones,.rasgos{list-style:none;padding:0;margin:0}
+section{margin-top:40px}
+
+/* Controles de 44 px: primario (.boton), secundario (button) y campos. */
+form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0}
+button,.boton{font:inherit;font-size:15px;font-weight:600;line-height:20px;min-height:var(--tactil);padding:0 18px;border-radius:var(--r-medio);cursor:pointer;text-decoration:none}
+button{border:var(--borde-control);background:var(--superficie);color:var(--tinta);transition:background-color var(--dur-rapida) var(--curva-estandar),border-color var(--dur-rapida) var(--curva-estandar),transform var(--dur-rapida) var(--curva-estandar)}
+button:hover{border-color:var(--cafe-700);background:var(--cafe-100);color:var(--cafe-800)}
+button:active{border-color:var(--cafe-800);background:#ead6c2;color:var(--cafe-900);transform:translateY(1px)}
+.boton{display:inline-flex;align-items:center;justify-content:center;border:0;background:var(--cafe-700);color:var(--papel);transition:background-color var(--dur-rapida) var(--curva-estandar),transform var(--dur-rapida) var(--curva-estandar)}
+a.boton:hover,button.boton:hover{background:var(--cafe-800);color:var(--papel)}
+a.boton:active,button.boton:active{background:var(--cafe-900);color:var(--papel);transform:translateY(1px)}
+a.boton:focus-visible,button.boton:focus-visible{outline:none;box-shadow:0 0 0 2px var(--papel),0 0 0 4px var(--cafe-700)}
+button:disabled{border:2px dashed #c9bcab;background:var(--papel);color:#6b5d50;cursor:not-allowed;transform:none}
+select,input{font:inherit;min-height:var(--tactil);padding:0 10px;border:var(--borde-control);border-radius:var(--r-medio);background:var(--superficie);color:var(--tinta);max-width:100%}
+select{min-width:64px;transition:border-color var(--dur-rapida) var(--curva-estandar)}
+select:hover,input:hover{border-color:var(--cafe-800)}
+select:focus-visible,input:focus-visible{border-color:var(--cafe-700)}
+input[aria-invalid="true"]{border-color:var(--error);background:var(--error-100)}
+label{font-size:15px}
+.ingreso{flex-direction:column;align-items:stretch;max-width:420px;gap:6px;margin-bottom:16px}
+.ingreso label{font-weight:600}
+.ingreso button{margin-top:6px;align-self:flex-start}
+.salir-no{display:inline-flex;align-items:center;min-height:var(--tactil);padding:0 8px}
+
+/* Avisos y etiquetas. */
+.aviso,.error{padding:10px 14px;border-radius:var(--r-medio);color:var(--tinta)}
+.aviso{background:var(--miel-100);border:1.5px solid #e0c060}
+.aviso.exito{background:var(--hoja-100);border-color:var(--hoja)}
+.error{background:var(--error-100);border:1.5px solid var(--error)}
+.muestra{display:inline-block;margin:0;padding:3px 8px;border-radius:var(--r-chico);background:var(--cafe-100);color:var(--cafe-800);font-size:12px;line-height:16px;font-weight:600;letter-spacing:.03em}
+.saldo{display:inline-block;padding:8px 16px;border:var(--borde-fino);border-radius:var(--r-pildora);background:var(--superficie);font-size:15px;line-height:24px}
+.precio,.total,.subtotal{font-family:var(--f-display);font-weight:600;font-variant-numeric:tabular-nums}
+.precio{font-size:20px;line-height:28px}
+.rasgos{margin:0;font-size:14px;line-height:20px;color:var(--tinta-2)}
+.rasgos li{display:inline}
+.rasgos li+li::before{content:" \00b7\0020"}
+
+/* Tarjeta de producto: reposo, hover, foco de teclado y presion. */
+.productos{display:grid;gap:24px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.producto{position:relative;display:flex;flex-direction:column;gap:10px;background:var(--superficie);border:var(--borde-fino);border-radius:var(--r-grande);padding:14px 14px 16px;box-shadow:var(--sombra-1);transition:transform var(--dur-lenta) var(--curva-salida),box-shadow var(--dur-lenta) var(--curva-salida),border-color var(--dur-media) var(--curva-estandar)}
+.producto>*{margin:0}
+.producto .foto{overflow:hidden;border-radius:12px;background:var(--superficie)}
+.producto .foto img{width:100%;aspect-ratio:1;object-fit:contain;transition:transform var(--dur-lenta) var(--curva-salida)}
+.producto .muestra{align-self:flex-start}
+.producto h3 a{color:var(--cafe-700);text-decoration:none}
+.producto h3 a::after{content:"";position:absolute;inset:0;border-radius:var(--r-grande)}
+.producto h3 a:focus-visible{outline:none}
+.producto:hover{transform:translateY(-3px);border-color:var(--cafe-500);box-shadow:var(--sombra-2)}
+.producto:hover .foto img{transform:scale(1.04)}
+.producto:hover h3 a,.producto:has(h3 a:focus-visible) h3 a{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px}
+.producto:has(h3 a:focus-visible){outline:var(--foco);outline-offset:3px}
+.producto:has(h3 a:active){transform:scale(.99);border-color:var(--cafe-700);box-shadow:var(--sombra-1);transition-duration:var(--dur-rapida)}
+.producto form{position:relative;z-index:1;flex-wrap:nowrap}
+.producto form .boton{flex:1}
+@supports not selector(:has(*)){.producto h3 a:focus-visible{outline:var(--foco);outline-offset:2px}}
+
+/* Carrito, resumen y confirmacion. */
+.renglones{display:flex;flex-direction:column;gap:12px;margin-bottom:20px}
+.renglon{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;align-items:center;background:var(--superficie);border:var(--borde-fino);border-radius:var(--r-grande);padding:16px 20px;box-shadow:var(--sombra-1)}
+.renglon h2,.renglon h3{margin:0}
+.renglon p{margin:0}
+.renglon .linea{grid-column:1/-1;color:var(--tinta-2);font-size:14px}
+.renglon .subtotal{grid-row:1;grid-column:2;font-size:18px}
+.renglon .acciones{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:8px}
+.total{font-size:20px;line-height:28px;margin-bottom:8px}
+
+/* Pagina de producto y visor 3D. */
+.detalle{display:grid;gap:16px 40px;grid-template-columns:minmax(0,1fr) minmax(240px,360px);align-items:start}
+.detalle h1{margin-bottom:12px}
+.detalle .muestra{margin-bottom:12px}
+.detalle .rasgos{margin-bottom:16px}
+.detalle .rasgos li{display:block}
+.detalle .rasgos li+li::before{content:none}
+.detalle .precio{font-size:26px;line-height:32px;margin-bottom:16px}
+.detalle .agregar{margin-bottom:12px}
+.visor{position:relative;aspect-ratio:1;background:var(--superficie);border:var(--borde-fino);border-radius:var(--r-grande);box-shadow:var(--sombra-1);overflow:hidden}
+.visor>img{width:100%;height:100%;object-fit:contain}
+.ver3d{margin-top:12px}
 .visor-marco{position:absolute;inset:0;display:flex;flex-direction:column}
-.visor-marco model-viewer{flex:1;width:100%;min-height:0;background:#fff}
+.visor-marco model-viewer{flex:1;width:100%;min-height:0;background:var(--superficie)}
 .visor-marco.cargando model-viewer{opacity:0}
-.visor-marco model-viewer:focus-visible{outline:3px solid #7a3e12;outline-offset:-3px}
-.visor-carga,.visor-error{position:absolute;left:12px;right:12px;top:12px;background:#fff;border:1px solid #e4ded3;border-radius:6px;padding:8px 12px}
-.visor-carga p,.visor-error p{margin:0 0 6px}
-.visor-carga progress{width:100%}
-.visor-error{border-color:#d08070;background:#fde8e4}
-.visor-ayuda{margin:0;padding:4px 12px;font-size:14px;color:#555;background:#fff}
-.visor-botones{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;border-top:1px solid #e4ded3;background:#fff}
-.visor-botones button{min-width:40px;min-height:40px}
+.visor-marco model-viewer:focus-visible{outline:3px solid var(--cafe-700);outline-offset:-3px}
+.visor-carga,.visor-error{position:absolute;left:12px;right:12px;top:12px;background:var(--superficie);border:var(--borde-fino);border-radius:var(--r-medio);box-shadow:var(--sombra-2);padding:10px 14px}
+.visor-carga p,.visor-error p{margin:0 0 8px}
+.visor-carga progress{width:100%;accent-color:var(--cafe-700)}
+.visor-error{border-color:var(--error);background:var(--error-100)}
+.visor-ayuda{margin:0;padding:4px 12px;font-size:14px;color:var(--tinta-2);background:var(--superficie)}
+.visor-botones{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;border-top:var(--borde-fino);background:var(--superficie)}
+.visor-botones button{min-width:var(--tactil);padding:0 12px}
 .visor-botones .visor-cerrar{margin-left:auto}
 .visor-estado:empty{display:none}
 [hidden]{display:none!important}
+
+@media (max-width:720px){.detalle{grid-template-columns:1fr}}
+
+/* Movil: cabecera en dos filas, tarjetas en fila y escala tipografica chica. */
+@media (max-width:560px){
+h1{font-size:30px;line-height:36px}
+h2{font-size:22px;line-height:28px;margin-bottom:12px}
+h3{font-size:17px;line-height:22px}
+.cabecera header{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:8px 16px 6px}
+.marca{gap:6px;font-size:21px}
+.marca svg{width:30px;height:30px}
+.lema{display:none}
+.idioma{grid-column:2;grid-row:1}
+.idioma span,.idioma a{min-width:44px;padding:0 10px}
+.cabecera nav{grid-column:1/-1;grid-row:2;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-left:0}
+.cabecera nav a{justify-content:center;gap:6px;padding:0 4px}
+.cabecera nav a[aria-current="page"]::after{left:22px;right:22px}
+main{padding:24px 16px 40px}
+footer p{padding:20px 16px 32px}
+section{margin-top:32px}
+.productos{display:flex;flex-direction:column;gap:12px}
+.producto{display:grid;grid-template-columns:112px minmax(0,1fr);gap:6px 14px;padding:12px;transition:transform var(--dur-rapida) var(--curva-estandar),border-color var(--dur-media) var(--curva-estandar)}
+.producto>*{grid-column:2}
+.producto .foto{grid-column:1;grid-row:1/span 4;align-self:start;border-radius:var(--r-medio)}
+.producto .foto img{width:112px;height:112px}
+.producto .rasgos{font-size:13px;line-height:18px}
+.producto .precio{font-size:18px;line-height:24px}
+.producto form{grid-column:1/-1;margin-top:6px}
+.producto:hover{transform:none;box-shadow:var(--sombra-1)}
+.producto:hover .foto img{transform:none}
+.producto:has(h3 a:active){transform:scale(.985)}
+.renglon{grid-template-columns:minmax(0,1fr);padding:14px 16px}
+.renglon .subtotal{grid-row:auto;grid-column:1}
+.renglon .acciones{gap:8px}
+.renglon button{padding:0 12px}
+.detalle .precio{font-size:22px;line-height:28px}
+}
+
+@media (prefers-reduced-motion:reduce){
+*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}
+.producto:hover,.producto:has(h3 a:active),.producto:hover .foto img,button:active,.boton:active{transform:none}
+}
 """
 ESTILO_V = recursos.version_de(ESTILO)
 
@@ -108,17 +256,57 @@ def _aviso(idioma, aviso):
     extra = ""
     if aviso == "agregado":
         extra = ' <a href="%s/carrito">%s</a>' % (PREFIJOS[idioma], _e(t("ficha.agregado.ver", idioma)))
-    return '<p class="aviso" role="status">%s%s</p>' % (_e(t(AVISOS[aviso], idioma)), extra)
+    return '<p class="aviso%s" role="status">%s%s</p>' % (
+        " exito" if aviso in EXITOS else "", _e(t(AVISOS[aviso], idioma)), extra)
 
 
-def _cuenta(idioma, ingresada):
+def _enlace_menu(href, texto, camino, marcar, aria=""):
+    """Enlace del menu; aria-current="page" si es la pagina donde estamos."""
+    actual = ' aria-current="page"' if marcar and camino == href else ""
+    return '<a href="%s"%s%s>%s</a>\n' % (_e(href), actual, aria, texto)
+
+
+def _cuenta(idioma, ingresada, camino, marcar):
     """Enlace de la barra: Salir si la sesion ya entro con el enlace, si no Ingresar."""
-    if ingresada:
-        return '<a href="%s/salir">%s</a>\n' % (PREFIJOS[idioma], _e(t("nav.salir", idioma)))
-    return '<a href="%s/ingresar">%s</a>\n' % (PREFIJOS[idioma], _e(t("nav.ingresar", idioma)))
+    pre = PREFIJOS[idioma]
+    clave, destino = ("nav.salir", "/salir") if ingresada else ("nav.ingresar", "/ingresar")
+    return _enlace_menu(pre + destino, _e(t(clave, idioma)), pre + camino, marcar)
 
 
-def _documento(idioma, titulo, camino, renglones, contenido, ingresada=False, cabeza=""):
+def _idioma(idioma, otro, camino):
+    """Selector es/en: el idioma actual es un span (aria-current) y el otro, un enlace."""
+    return "".join((
+        '<div class="idioma" role="group" aria-label="%s">\n' % _e(t("idioma.aria", idioma)),
+        '<span aria-current="true" lang="%s">%s</span>\n' % (idioma, idioma.upper()),
+        '<a href="%s%s" lang="%s" hreflang="%s" aria-label="%s">%s</a>\n</div>\n' % (
+            PREFIJOS[otro], camino, otro, otro, _e(t("idioma.leer." + otro, idioma)),
+            otro.upper()),
+    ))
+
+
+def _cabecera(idioma, otro, camino, n, ingresada, marcar):
+    pre = PREFIJOS[idioma]
+    ruta = pre + camino
+    return "".join((
+        '<div class="cabecera">\n<header>\n',
+        '<a class="marca" href="%s/" aria-label="%s">%s<span>%s</span></a>\n' % (
+            pre, _e(t("nav.marca.aria", idioma)), marca.LOGO, _e(t("nav.marca", idioma))),
+        '<span class="lema">%s</span>\n' % _e(t("nav.lema", idioma)),
+        '<nav aria-label="%s">\n' % _e(t("nav.principal", idioma)),
+        _enlace_menu(pre + "/", _e(t("nav.catalogo", idioma)), ruta, marcar),
+        _enlace_menu(pre + "/carrito",
+                     '%s <span class="insignia">%d</span>' % (_e(t("nav.carrito", idioma)), n),
+                     ruta, marcar, ' aria-label="%s"' % _e(t("nav.carrito.aria", idioma, n=n))),
+        _cuenta(idioma, ingresada, camino, marcar),
+        "</nav>\n",
+        _idioma(idioma, otro, camino),
+        "</header>\n</div>\n",
+    ))
+
+
+def _documento(idioma, titulo, camino, renglones, contenido, ingresada=False, cabeza="",
+               marcar=True):
+    """`marcar=False` en las paginas que no son ninguna del menu (404, error generico)."""
     pre, otro = PREFIJOS[idioma], OTRO[idioma]
     n = sum(c for _, c in _productos(renglones))
     return "".join((
@@ -126,22 +314,14 @@ def _documento(idioma, titulo, camino, renglones, contenido, ingresada=False, ca
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n',
         "<title>%s</title>\n" % _e(titulo),
         '<meta name="description" content="%s">\n' % _e(t("aviso.tab.descripcion", idioma)),
+        '<link rel="icon" type="image/svg+xml" href="/tienda/favicon.svg">\n',
         '<link rel="stylesheet" href="/tienda/estilo.css?v=%s">\n' % ESTILO_V,
         cabeza,
         '<link rel="alternate" hreflang="%s" href="%s%s">\n' % (otro, PREFIJOS[otro], camino),
         "</head>\n<body>\n",
         '<a class="saltar" href="#contenido">%s</a>\n' % _e(t("nav.saltar", idioma)),
         '<p class="franja">%s</p>\n' % _e(t("aviso.franja", idioma)),
-        '<header>\n<a class="marca" href="%s/">%s</a>\n' % (pre, _e(t("nav.marca", idioma))),
-        "<span>%s</span>\n<nav>\n" % _e(t("nav.lema", idioma)),
-        '<a href="%s/">%s</a>\n' % (pre, _e(t("nav.catalogo", idioma))),
-        '<a href="%s/carrito" aria-label="%s">%s (%d)</a>\n' % (
-            pre, _e(t("nav.carrito.aria", idioma, n=n)), _e(t("nav.carrito", idioma)), n),
-        _cuenta(idioma, ingresada),
-        '<a href="%s%s" lang="%s" hreflang="%s" aria-label="%s">%s</a>\n' % (
-            PREFIJOS[otro], camino, otro, otro, _e(t("idioma.aria", idioma)),
-            _e(t("idioma." + otro, idioma))),
-        "</nav>\n</header>\n",
+        _cabecera(idioma, otro, camino, n, ingresada, marcar),
         '<main id="contenido">\n%s</main>\n' % contenido,
         "<footer><p>%s</p></footer>\n</body>\n</html>\n" % _e(t("aviso.pie", idioma)),
     ))
@@ -155,18 +335,18 @@ def _imagen(p, idioma, perezosa):
 def _agregar(idioma, csrf, p, volver=""):
     campo = '<input type="hidden" name="volver" value="producto">' if volver else ""
     return "".join((
-        '<form method="post" action="%s/carrito/agregar">%s%s' % (
+        '<form class="agregar" method="post" action="%s/carrito/agregar">%s%s' % (
             PREFIJOS[idioma], _ocultos(csrf, p), campo),
-        '<label>%s <select name="cantidad">%s</select></label>' % (
-            _e(t("carrito.unidades", idioma)), _opciones(1)),
-        '<button type="submit">%s</button></form>\n' % _e(t("ficha.agregar", idioma)),
+        '<select class="cantidad" name="cantidad" aria-label="%s">%s</select>' % (
+            _e(t("ficha.cantidad.aria", idioma, producto=p.nombre(idioma))), _opciones(1)),
+        '<button type="submit" class="boton">%s</button></form>\n' % _e(t("ficha.agregar", idioma)),
     ))
 
 
 def _ficha(idioma, csrf, p):
     rasgos = "".join("<li>%s</li>" % _e(r) for r in p.rasgos(idioma))
     return "".join((
-        '<li class="producto">\n%s\n' % _imagen(p, idioma, True),
+        '<li class="producto">\n<div class="foto">%s</div>\n' % _imagen(p, idioma, True),
         '<h3><a href="%s/producto/%s">%s</a></h3>\n' % (
             PREFIJOS[idioma], _e(p.numero), _e(p.nombre(idioma))),
         '<p class="muestra">%s</p>\n' % _e(t("etiqueta.muestra", idioma)),
@@ -270,24 +450,26 @@ def producto_html(idioma, csrf, renglones, p, aviso=None, ingresada=False):
 def no_encontrado_html(idioma, renglones, ingresada=False):
     contenido = '<p>%s</p>\n<p><a href="%s/">%s</a></p>\n' % (
         _e(t("error.404.cuerpo", idioma)), PREFIJOS[idioma], _e(t("error.404.boton", idioma)))
-    return _pagina_simple(idioma, "error.404.titulo", "/", renglones, contenido, ingresada)
+    return _pagina_simple(idioma, "error.404.titulo", "/", renglones, contenido, ingresada,
+                          marcar=False)
 
 
 def _renglon(idioma, csrf, p, n):
     pre = PREFIJOS[idioma]
     return "".join((
         '<li class="renglon">\n<h2>%s</h2>\n' % _e(p.nombre(idioma)),
-        "<p>%s</p>\n" % _e(t("carrito.linea", idioma, n=n,
-                             monto=catalogo.formatear_monto(p.precio, idioma))),
-        "<p>%s</p>\n" % _e(t("carrito.subtotal", idioma,
-                             monto=catalogo.formatear_monto(p.precio * n, idioma))),
+        '<p class="linea">%s</p>\n' % _e(t("carrito.linea", idioma, n=n,
+                                         monto=catalogo.formatear_monto(p.precio, idioma))),
+        '<p class="subtotal">%s</p>\n' % _e(t("carrito.subtotal", idioma,
+                                              monto=catalogo.formatear_monto(p.precio * n, idioma))),
+        '<div class="acciones">\n',
         '<form method="post" action="%s/carrito/cantidad">%s' % (pre, _ocultos(csrf, p)),
-        '<label>%s <select name="cantidad" aria-label="%s">%s</select></label>' % (
+        '<label>%s <select class="cantidad" name="cantidad" aria-label="%s">%s</select></label>' % (
             _e(t("carrito.unidades", idioma)), _e(unidades(n, p.nombre(idioma), idioma)),
             _opciones(n)),
         '<button type="submit">%s</button></form>\n' % _e(t("carrito.actualizar", idioma)),
         '<form method="post" action="%s/carrito/quitar">%s' % (pre, _ocultos(csrf, p)),
-        '<button type="submit">%s</button></form>\n</li>\n' % _e(t("carrito.quitar", idioma)),
+        '<button type="submit">%s</button></form>\n</div>\n</li>\n' % _e(t("carrito.quitar", idioma)),
     ))
 
 
@@ -321,10 +503,11 @@ def _seguir(idioma, ingresada):
 
 # --- Ingreso y salida (T09) --------------------------------------------------
 
-def _pagina_simple(idioma, clave_titulo, camino, renglones, contenido, ingresada):
+def _pagina_simple(idioma, clave_titulo, camino, renglones, contenido, ingresada, marcar=True):
     titulo = t(clave_titulo, idioma)
     return _documento(idioma, t("aviso.tab.titulo.pagina", idioma, pagina=titulo), camino,
-                      renglones, "<h1>%s</h1>\n%s" % (_e(titulo), contenido), ingresada)
+                      renglones, "<h1>%s</h1>\n%s" % (_e(titulo), contenido), ingresada,
+                      marcar=marcar)
 
 
 def _campo_csrf(csrf):
@@ -346,13 +529,13 @@ def ingreso_html(idioma, csrf, renglones, ingresada=False, correo="", invalido=F
     contenido = "".join((
         "<p>%s</p>\n" % _e(t("ingreso.cuerpo", idioma)),
         error,
-        '<form method="post" action="%s/ingresar">%s' % (pre, _campo_csrf(csrf)),
-        '<label for="correo">%s</label> ' % _e(t("ingreso.campo", idioma)),
+        '<form class="ingreso" method="post" action="%s/ingresar">%s' % (pre, _campo_csrf(csrf)),
+        '<label for="correo">%s</label>' % _e(t("ingreso.campo", idioma)),
         '<input type="email" id="correo" name="correo" required maxlength="254"'
         ' autocomplete="email" placeholder="%s" value="%s"%s>' % (
             _e(t("ingreso.campo.ejemplo", idioma)), _e(correo),
             ' aria-invalid="true" aria-describedby="correo-error"' if invalido else ""),
-        '<button type="submit">%s</button></form>\n' % _e(t("ingreso.boton", idioma)),
+        '<button type="submit" class="boton">%s</button></form>\n' % _e(t("ingreso.boton", idioma)),
         "<p>%s</p>\n" % _e(t("ingreso.dato", idioma)),
         "<p>%s</p>\n" % _e(t("ingreso.dato.abandono", idioma)),
         "<p>%s</p>\n" % _e(t("ingreso.dato.gmail", idioma)),
@@ -375,7 +558,8 @@ def confirmar_html(idioma, token, renglones, ingresada=False):
         "<p>%s</p>\n" % _e(t("ingreso.confirmar.cuerpo", idioma)),
         '<form method="post" action="%s/entrar">' % PREFIJOS[idioma],
         '<input type="hidden" name="t" value="%s">' % _e(token),
-        '<button type="submit">%s</button></form>\n' % _e(t("ingreso.confirmar.boton", idioma)),
+        '<button type="submit" class="boton">%s</button></form>\n'
+        % _e(t("ingreso.confirmar.boton", idioma)),
     ))
     return _pagina_simple(idioma, "ingreso.confirmar.titulo", "/ingresar", renglones, contenido,
                           ingresada)
@@ -396,14 +580,16 @@ def mensaje_html(idioma, base, renglones, ingresada=False):
     href = destino if absoluto else PREFIJOS[idioma] + destino
     contenido = '<p>%s</p>\n<p><a href="%s">%s</a></p>\n' % (
         _e(t(base + ".cuerpo", idioma)), _e(href), _e(t(base + ".boton", idioma)))
-    return _pagina_simple(idioma, base + ".titulo", "/ingresar", renglones, contenido, ingresada)
+    return _pagina_simple(idioma, base + ".titulo", "/ingresar", renglones, contenido, ingresada,
+                          marcar=False)
 
 
 def generico_html(idioma, renglones, ingresada=False):
     contenido = '<p><a href="%s/">%s</a></p>\n' % (PREFIJOS[idioma],
                                                     _e(t("error.404.boton", idioma)))
     return _documento(idioma, t("aviso.tab.titulo", idioma), "/", renglones,
-                      "<h1>%s</h1>\n%s" % (_e(t("error.generico", idioma)), contenido), ingresada)
+                      "<h1>%s</h1>\n%s" % (_e(t("error.generico", idioma)), contenido), ingresada,
+                      marcar=False)
 
 
 def salir_html(idioma, csrf, renglones, ingresada=False):
@@ -412,7 +598,7 @@ def salir_html(idioma, csrf, renglones, ingresada=False):
         "<p>%s</p>\n" % _e(t("salir.confirmar.cuerpo", idioma)),
         '<form method="post" action="%s/salir">%s' % (pre, _campo_csrf(csrf)),
         '<button type="submit">%s</button></form>\n' % _e(t("salir.confirmar.si", idioma)),
-        '<a href="%s/">%s</a>\n' % (pre, _e(t("salir.confirmar.no", idioma))),
+        '<a class="salir-no" href="%s/">%s</a>\n' % (pre, _e(t("salir.confirmar.no", idioma))),
     ))
     return _pagina_simple(idioma, "salir.confirmar.titulo", "/salir", renglones, contenido,
                           ingresada)
@@ -423,10 +609,10 @@ def salir_html(idioma, csrf, renglones, ingresada=False):
 def _resumen(idioma, p, n):
     return "".join((
         '<li class="renglon">\n<h3>%s</h3>\n' % _e(p.nombre(idioma)),
-        "<p>%s</p>\n" % _e(t("carrito.linea", idioma, n=n,
-                             monto=catalogo.formatear_monto(p.precio, idioma))),
-        "<p>%s</p>\n</li>\n" % _e(t("carrito.subtotal", idioma,
-                                    monto=catalogo.formatear_monto(p.precio * n, idioma))),
+        '<p class="linea">%s</p>\n' % _e(t("carrito.linea", idioma, n=n,
+                                         monto=catalogo.formatear_monto(p.precio, idioma))),
+        '<p class="subtotal">%s</p>\n</li>\n' % _e(t("carrito.subtotal", idioma,
+                                                     monto=catalogo.formatear_monto(p.precio * n, idioma))),
     ))
 
 
@@ -452,7 +638,7 @@ def checkout_html(idioma, csrf, renglones, correo, aviso=None):
     else:
         partes.append('<form method="post" action="%s/checkout">%s' % (PREFIJOS[idioma],
                                                                       _campo_csrf(csrf)))
-        partes.append('<button type="submit">%s</button></form>\n'
+        partes.append('<button type="submit" class="boton">%s</button></form>\n'
                       % _e(t("checkout.boton", idioma)))
     return _pagina_simple(idioma, "checkout.titulo", "/checkout", renglones, "".join(partes), True)
 

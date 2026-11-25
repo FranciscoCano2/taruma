@@ -21,7 +21,8 @@ Corre en `/tienda` del portfolio (repo `arya-web`), detrás de Caddy. Usa solo l
 - `tienda/ingreso.py`: rutas de ingreso con enlace mágico y salida.
 - `tienda/compra.py`: resumen (`/checkout`), compra de prueba con correo de gracias y confirmación. Al comprar se borra la sesión con el correo; solo queda un contador anónimo.
 - `tienda/limpieza.py`: hilo `limpieza`, borra cada 5 minutos lo vencido.
-- `tienda/paginas.py`: HTML de todas las páginas y hoja de estilo. Sin scripts ni estilos en línea; solo la página de producto carga un script (el visor 3D, externo).
+- `tienda/paginas.py`: HTML de todas las páginas y hoja de estilo (`ESTILO`, con los tokens de diseño como variables CSS en `:root`: café `#7a3e12`, papel `#faf8f4`, serif del sistema para los títulos, bordes de 1,5 y 2 px, sombras y duraciones). Sin scripts ni estilos en línea; solo la página de producto carga un script (el visor 3D, externo).
+- `tienda/marca.py`: el logo («Hoja de tarumá», en línea en la cabecera) y el favicon SVG.
 - `tienda/recursos.py`: URL de `estaticos/` y versión (`?v=`) de los `.js`, calculada al arrancar.
 - `tienda/estaticos.py`: solo para desarrollo, sirve `estaticos/` con `TIENDA_ESTATICOS` (ver abajo).
 - `estaticos/`: modelos `.glb`, imágenes `.webp`, `js/model-viewer.min.js`, `js/meshopt_decoder.js` y `js/visor.js` (el visor). En producción los sirve Caddy. Licencias en `estaticos/LICENCIAS.md`.
@@ -77,6 +78,7 @@ Todas bajo `/tienda` y, en inglés, bajo `/tienda/en`.
 | GET | `/producto/NN` | página de producto con visor 3D (404 en HTML si no existe) | T12a |
 | POST | `/carrito/agregar`, `/carrito/cantidad`, `/carrito/quitar` | cambian el carrito (PRG, la sesión nace en el primer POST válido; `volver=producto` vuelve a la página del producto) | T08 |
 | GET | `/estilo.css` | hoja de estilo, sin registro (se pide con `?v=`) | T08 |
+| GET | `/favicon.svg` | favicon (`<link rel="icon">` de cada página), sin registro | T3 |
 | GET / HEAD | `/estaticos/…` | solo con `TIENDA_ESTATICOS` (desarrollo) | T12a |
 | GET / POST | `/ingresar` | formulario / pide el enlace mágico | T09 |
 | GET | `/ingresar/enviado` | "revisá tu correo" | T09 |
