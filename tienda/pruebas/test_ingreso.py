@@ -173,7 +173,8 @@ class Ingresar(Base):
             self.assertIn(t("ingreso.dato.gmail", idioma), html)
             self.assertIn('name="correo"', html)
             self.assertNotIn('name="csrf"', html)
-            self.assertIn('href="%s/ingresar">%s<' % (prefijo, t("nav.ingresar", idioma)), html)
+            self.assertIn('href="%s/ingresar" aria-current="page">%s<' % (prefijo, t("nav.ingresar", idioma)),
+                          html)
             self.assertNotIn("<script", html)
         self.assertEqual(datos.contar_sesiones(), 0)
 

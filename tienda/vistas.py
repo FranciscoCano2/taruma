@@ -6,10 +6,11 @@ de pasar el origen y el limite por IP. Con sesion se exige ademas el CSRF.
 """
 import re
 
-from tienda import app, catalogo, datos, limites, paginas, sesion
+from tienda import app, catalogo, datos, limites, marca, paginas, sesion
 from tienda.app import Respuesta, ruta
 
 CSS = "text/css; charset=utf-8"
+SVG = "image/svg+xml"
 MAXIMO = 9
 _CANTIDAD = re.compile(r"[1-9]")
 
@@ -75,6 +76,12 @@ def ver_producto(p):
 @ruta("GET", "/estilo\\.css", "estilo", registrar=False)
 def estilo(p):
     return Respuesta(200, paginas.ESTILO, CSS)
+
+
+@ruta("GET", "/favicon\\.svg", "favicon", registrar=False)
+def favicon(p):
+    """El navegador lo pide en cada pagina (<link rel="icon">): sin registro, como el CSS."""
+    return Respuesta(200, marca.FAVICON, SVG)
 
 
 def _cantidad(valor):
